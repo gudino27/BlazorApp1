@@ -1,0 +1,270 @@
+﻿@page "/Schedule"
+@inject IJSRuntime JSRuntime
+@using BlazorApp1.Services
+@inject CourseService DataService
+
+<h3>Course Scheduler</h3>
+
+<!-- Campus & Term Selectors -->
+<div>
+    <label>Campus:</label>
+    <select @bind="SelectedCampus">
+        @foreach (var campus in AvailableCampuses)
+        {
+            <option value="@campus">@campus</option>
+        }
+    </select>
+</div>
+<div>
+    <label>Term:</label>
+    <select @bind="SelectedTerm">
+        @foreach (var term in AvailableTerms)
+        {
+            <option value="@term">@term</option>
+        }
+    </select>
+</div>
+<button @onclick="LoadCourses">Load Courses</button>
+
+<hr />
+
+<button @onclick="ToggleSearch">@(ShowSearchForm ? "Hide" : "Show") Course Search</button>
+
+@if (ShowSearchForm)
+{
+    <div>
+        <input placeholder="Type course name..." @bind="SearchQuery" @bind:event="oninput" />
+        <ul>
+            @foreach (var course in FilteredCourses)
+            {
+                <li>
+                    <span style="cursor:pointer; text-decoration:underline" @onclick="() => SelectCourse(course)">
+                        @course.CourseName
+                    </span>
+                </li>
+            }
+        </ul>
+    </div>
+}
+
+@if (SelectedCourse != null)
+{
+    <h4>Sections for @SelectedCourse.CourseName</h4>
+    <ul>
+        @foreach (var sec in SelectedCourse.Sections)
+        {
+            <li>
+                <div style="font-size: smaller; border: 1px solid #ccc; padding: 5px; margin-bottom:5px; cursor:pointer"
+                     @onclick="() => ShowSectionDetail(sec)">
+                    @FormatSectionDetail(SelectedCourse, sec)
+                </div>
+            </li>
+        }
+    </ul>
+}
+
+@if (DisplayedSection != null)
+{
+    <h4>Selected Section Detail</h4>
+    <div style="border: 1px solid #000; padding: 10px; margin-bottom:10px;">
+        <pre>@FormatSectionDetail(SelectedCourse, DisplayedSection)</pre>
+        <button @onclick="() => AddSection(DisplayedSection)">Add Section</button>
+    </div>
+}
+
+<hr />
+<!-- RENDER THE WEEKLY SCHEDULE -->
+<h3>Your Weekly Schedule</h3>
+@RenderWeeklyCalendar()
+
+@code {
+    List<string> AvailableCampuses = new() { "Everett", "Global", "Pullman", "Spokane", "Tri-Cities", "Vancouver" };
+    List<string> AvailableTerms = new() { "Fall 2025", "Spring 2025", "Summer 2025" };
+
+    string SelectedCampus { get; set; } = "Everett";
+    string SelectedTerm { get; set; } = "Fall 2025";
+
+    List<CourseData> CoursesToDisplay = new();
+
+    bool ShowSearchForm { get; set; } = false;
+    string SearchQuery { get; set; } = "";
+    CourseData SelectedCourse { get; set; }
+    SectionData DisplayedSection { get; set; }
+
+    List<SectionData> ScheduledSections = new();
+
+    void ToggleSearch() => ShowSearchForm = !ShowSearchForm;
+
+    void LoadCourses()
+    {
+        CoursesToDisplay = DataService.GetCourses(SelectedCampus, SelectedTerm);
+    }
+
+    IEnumerable<CourseData> FilteredCourses =>
+        string.IsNullOrWhiteSpace(SearchQuery)
+            ? CoursesToDisplay
+            : CoursesToDisplay.Where(c => !string.IsNullOrWhiteSpace(c.CourseName) &&
+                                            c.CourseName.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase));
+
+    void SelectCourse(CourseData course)
+    {
+        SelectedCourse = course;
+        DisplayedSection = null;
+    }
+
+    void ShowSectionDetail(SectionData sec)
+    {
+        DisplayedSection = sec;
+    }
+
+    async Task AddSection(SectionData sec)
+    {
+        if (sec.Status == "Full" || sec.Status == "Waitlist")
+        {
+            var msg = sec.Status == "Full"
+                ? "This class is full. Add it anyway?"
+                : $"This class is waitlisted. You are number {sec.SpotsLeft} on the waitlist. Add it anyway?";
+            bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", msg);
+            if (!confirmed)
+            {
+                return;
+            }
+        }
+        ScheduledSections.Add(sec);
+        await JSRuntime.InvokeVoidAsync("alert", "Section added to schedule!");
+    }
+
+    // 1) "CPT_S 121 01"
+    // 2) "Program Design and Development C/C++"
+    // 3) "class number: 02699    Credits:4    time:M,W,F 12:10-1:00"
+    // 4) "Location: SPRK G0045    Instructor: A O'fallon    status: open Spots Left: 137"
+    string FormatSectionDetail(CourseData course, SectionData sec)
+    {
+        string courseCode = "";
+        string courseTitle = "";
+        if (!string.IsNullOrWhiteSpace(course.CourseName))
+        {
+            var parts = course.CourseName.Split(' ');
+            if (parts.Length >= 3)
+            {
+                courseCode = $"{parts[0]} {parts[1]}";
+                courseTitle = string.Join(" ", parts.Skip(2));
+            }
+            else
+            {
+                courseCode = course.CourseName;
+            }
+        }
+        string line1 = $"{courseCode} {sec.SectionNumber}";
+        string line2 = courseTitle;
+        string line3 = $"class number: {sec.ClassNumber}\tCredits:{sec.Credits}\ttime:{sec.Days} {sec.Time}";
+        string line4 = $"Location: {sec.Location}\tInstructor: {sec.Instructor}\tstatus: {sec.Status} Spots Left: {sec.SpotsLeft}";
+        return $"{line1}\n{line2}\n{line3}\n{line4}";
+    }
+
+    //
+    // ------------------- THE WEEKLY SCHEDULE RENDERING --------------------
+    //
+
+    // A simple approach: Render a table from 8:00 AM to 6:00 PM, Monday-Friday.
+    // We'll parse the section's "Days" and "Time" to see if it belongs in each cell.
+    private RenderFragment RenderWeeklyCalendar() => builder =>
+    {
+        // We'll define a small list for days, using single-letter codes that appear in your scraped data:
+        var days = new[] { 'M', 'T', 'W', 'H', 'F' };
+
+        // Hours range
+        var startHour = 8;
+        var endHour = 18; // 6pm
+
+        int seq = 0;
+        builder.OpenElement(seq++, "table");
+        builder.AddAttribute(seq++, "class", "weekly-calendar");
+        builder.AddAttribute(seq++, "border", "1");
+        builder.AddAttribute(seq++, "cellpadding", "5");
+        builder.AddAttribute(seq++, "cellspacing", "0");
+
+        // Header
+        builder.OpenElement(seq++, "thead");
+        builder.OpenElement(seq++, "tr");
+
+        // Empty top-left corner
+        builder.OpenElement(seq++, "th");
+        builder.CloseElement(); // </th>
+
+        // Days columns
+        foreach (var d in days)
+        {
+            builder.OpenElement(seq++, "th");
+            builder.AddContent(seq++, d == 'H' ? "Th" : d.ToString()); // If we used 'H' for Thursday, display "Th".
+            builder.CloseElement(); // </th>
+        }
+        builder.CloseElement(); // </tr>
+        builder.CloseElement(); // </thead>
+
+        // Body
+        builder.OpenElement(seq++, "tbody");
+        for (int hour = startHour; hour < endHour; hour++)
+        {
+            builder.OpenElement(seq++, "tr");
+
+            // Left column for time range
+            builder.OpenElement(seq++, "td");
+            builder.AddContent(seq++, $"{hour}:00 - {hour + 1}:00");
+            builder.CloseElement(); // </td>
+
+            // One cell per day
+            foreach (var d in days)
+            {
+                builder.OpenElement(seq++, "td");
+                // Find all scheduled sections that match this day and hour
+                var matchedSections = ScheduledSections
+                    .Where(s => MatchesDayAndHour(s, d, hour))
+                    .ToList();
+
+                if (matchedSections.Any())
+                {
+                    foreach (var sec in matchedSections)
+                    {
+                        builder.OpenElement(seq++, "div");
+                        builder.AddAttribute(seq++, "style", "background-color:lightblue; margin:2px; padding:2px; font-size:small");
+                        builder.AddContent(seq++, $"{sec.SectionNumber} ({sec.Status})");
+                        builder.CloseElement(); // </div>
+                    }
+                }
+                builder.CloseElement(); // </td>
+            }
+
+            builder.CloseElement(); // </tr>
+        }
+        builder.CloseElement(); // </tbody>
+        builder.CloseElement(); // </table>
+    };
+
+    // Simple helper method that checks if a given SectionData belongs in a particular day/hour cell.
+    private bool MatchesDayAndHour(SectionData section, char dayChar, int hour)
+    {
+        // 1) Check if the section's Days contain this dayChar
+        //    e.g. Days = "M,W,F" => we see if dayChar is 'M', 'W', or 'F'
+        if (string.IsNullOrWhiteSpace(section.Days)) return false;
+        if (!section.Days.Contains(dayChar)) return false;
+        // If your data uses "M,W,F" or "M W F" or "MWF" or "TTh", you'll need to adapt this logic.
+
+        // 2) Parse the section's start time from e.g. "9:10-10:00"
+        //    We'll just look at the start hour (9 in this example).
+        if (string.IsNullOrWhiteSpace(section.Time)) return false;
+        var dashIndex = section.Time.IndexOf('-');
+        if (dashIndex < 1) return false; // no dash => can't parse
+        var startTime = section.Time.Substring(0, dashIndex).Trim(); // e.g. "9:10"
+
+        // Attempt to parse the hour part
+        var colonIndex = startTime.IndexOf(':');
+        if (colonIndex < 1) return false;
+        var hourStr = startTime.Substring(0, colonIndex); // "9"
+        if (!int.TryParse(hourStr, out int parsedHour)) return false;
+
+        // This is extremely naive: if the parsedHour == 'hour' from the table, we match
+        // (In real usage, you'd compare minutes, end time, etc. to see if it overlaps.)
+        return (parsedHour == hour);
+    }
+}

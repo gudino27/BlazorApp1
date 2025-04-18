@@ -1,0 +1,27 @@
+﻿version: '3.8'
+
+services:
+  app:
+    build: .
+    image: blazor-scraper:linux
+    environment:
+      ASPNETCORE_URLS: http://+:5000
+    expose:
+      - "5000"
+    networks:
+      - webnet
+
+  nginx:
+    image: nginx:alpine
+    depends_on:
+      - app
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "80:80"
+    networks:
+      - webnet
+
+networks:
+  webnet:
+    driver: bridge
