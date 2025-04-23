@@ -13,6 +13,7 @@
         private readonly ILogger<CourseDataBackgroundService> _logger;
         private readonly IMemoryCache _cache;
         private const string CourseDataCacheKey = "CourseData";
+        private const string DegreeDataCacheKey = "DegreeData";
         private readonly TimeSpan _refreshInterval = TimeSpan.FromHours(1);
         private readonly CourseService _courseService;
 
@@ -28,11 +29,16 @@
         {
             try
             {
+                _logger.LogInformation("Initial degree data load starting.");
                 // Run the initial thing when the app starts
+                await Task.Run(() => DegreeScrape.scrapeall(), stoppingToken);
+                updateCacheDegree();
+                _logger.LogInformation("Initial degree data load complete.");
+                await Task.Delay(1000, stoppingToken); // Delay to ensure degree data is loaded before course data
                 _logger.LogInformation("Initial course data load starting.");
-                await Task.Run(() => Sprint4.Runall(), stoppingToken);
+                await Task.Run(() => CourseScrape.Runall(), stoppingToken);
                 UpdateCache();
-                var courses = Sprint4.CampusesList
+                var courses = CourseScrape.CampusesList
                             .SelectMany(c => c.Terms)
                             .SelectMany(t => t.Courses)
                             .ToList();
@@ -46,7 +52,7 @@
                     await Task.Delay(_refreshInterval, stoppingToken);
 
                     _logger.LogInformation("Refreshing course data...");
-                    await Task.Run(() => Sprint4.DateLoad(), stoppingToken);
+                    await Task.Run(() => CourseScrape.DateLoad(), stoppingToken);
                     UpdateCache();
                     _logger.LogInformation("Course data refreshed.");
                 }
@@ -62,7 +68,11 @@
 
         private void UpdateCache()
         {
-            _cache.Set(CourseDataCacheKey, Sprint4.CampusesList);
+            _cache.Set(CourseDataCacheKey, CourseScrape.CampusesList);
+        }
+        private void updateCacheDegree()
+        {
+            _cache.Set(DegreeDataCacheKey, DegreeScrape.degreeList);
         }
     }
 }

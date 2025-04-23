@@ -1,10 +1,14 @@
 using BlazorApp1.Components;
+using BlazorApp1.Components.Pages;
 using BlazorApp1.Services;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddMemoryCache();
 builder.Services.AddHostedService<CourseDataBackgroundService>();
 builder.Services.AddSingleton<CourseService>();
+builder.Services.AddSingleton<DegreeService>();
+builder.Services.AddSingleton<CartService>();
+builder.Services.AddScoped<Transcript.StudentRecord>();
 
 
 // Add services to the container.

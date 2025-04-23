@@ -66,7 +66,7 @@
         public string GERCode { get; set; } = string.Empty;
         public string WritingInTheMajor { get; set; } = string.Empty;
         public string Cooperative { get; set; } = string.Empty;
-        public List<string> MeetingsInfo { get; set; } = new List<string>();
+        public List<MeetingInfo> Meetings { get; set; } = new();
         public List<string> Instructors { get; set; } = new List<string>();
         public string InstructionMode { get; set; } = string.Empty;
         public string EnrollmentLimit { get; set; } = string.Empty;
@@ -76,6 +76,12 @@
         public string EndDate { get; set; } = string.Empty;
         public string Footnotes { get; set; } = string.Empty;
 
+    }
+    public class MeetingInfo
+    {
+        public string Days { get; set; } = string.Empty;
+        public string Time { get; set; } = string.Empty;
+        public string Location { get; set; } = string.Empty;
     }
     public class CampusData
     {
@@ -109,7 +115,7 @@
     };
     }
 
-    partial class Sprint4
+    partial class CourseScrape
     {
         static ChromeDriver? mainDriver;
         public static List<Campus> CampusesList { get; set; } = new List<Campus>();
@@ -152,7 +158,7 @@
 
                 for (int i = 1; i <= 1; i++)
                 {
-                    for (int j = 1; j <= 1; j++)
+                    for (int j = 3; j <= 3; j++)
                     {
                         Console.WriteLine($"{campuses[i]} {terms[j]}");
                         ClickEvent(campuses[i], terms[j], mainDriver);
@@ -479,17 +485,17 @@
 
             foreach (var kvp in results.OrderBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase))
             {
-                //Console.WriteLine($"\n===========================================================  Subject: {kvp.Key}  ===========================================================");
+                Console.WriteLine($"\n===========================================================  Subject: {kvp.Key}  ===========================================================");
 
                 foreach (var course in kvp.Value.OrderBy(c => c.CourseName))  // Sort courses by name
                 {
-                    //Console.WriteLine($"{course.CourseName}");
+                    Console.WriteLine($"{course.CourseName}");
 
                     foreach (var section in course.Sections.OrderBy(s => s.SectionNumber))  // Sort sections numerically
                     {
                         //Console.WriteLine($"*   Section: {section.SectionNumber}, Credits: {section.Credits}, Class Number: {section.ClassNumber},Status: {section.Status}, Spots Left: {section.SpotsLeft}");
                         //Console.WriteLine($"    *   Days: {section.Days}, Time: {section.Time}, Location: {section.Location}, Instructor: {section.Instructor}");
-                        /*
+                        
                          foreach (var detail in section.CourseDescriptionDetails)
                         {
                             int maxWidth =80;
@@ -499,8 +505,12 @@
                             Console.WriteLine($"        *UCORE: {detail.UCORE}, , GER: {detail.GERCode}, Writing: {detail.WritingInTheMajor}");
                             Console.WriteLine($"        *Cooperative: {detail.Cooperative}, Instr. Mode: {detail.InstructionMode}");
                             Console.WriteLine($"        *Comment: {detail.Comment}, Footnotes: {detail.Footnotes}");
+                            foreach (var m in detail.Meetings)
+                            {
+                                Console.WriteLine($"    Days: {m.Days}, Time: {m.Time},Location: {m.Location}");
+                            }
                         }
-                         */
+                         
                         if (section.CourseDetails.Any())
                         {
                             foreach (var detail in section.CourseDetails)
@@ -656,7 +666,7 @@
                         if (sectionMap.ContainsKey(key))
                         {
                             sectionMap[key].CourseDescriptionDetails.Add(extraDetailsObj);
-                            //Console.WriteLine($"DEBUG: Added extra details to class number {key}. Count now: {sectionMap[key].CourseDescriptionDetails.Count}");
+                            Console.WriteLine($"DEBUG: Added extra details to class number {key}. Count now: {sectionMap[key].CourseDescriptionDetails.Count}");
 
                         }
 
@@ -682,11 +692,70 @@
             try
             {
                 Thread.Sleep(5000);
+                var wait = new WebDriverWait(driverInstance, TimeSpan.FromSeconds(10));
+                wait.Until(d => d.FindElements(By.CssSelector("li.sectionmeetingitem")).Any());
+                var items = driverInstance.FindElements(By.CssSelector("li.sectionmeetingitem"));
+                foreach (var item in items)
+                {
+                    var dtText = item.FindElement(By.CssSelector("span.sectionmeetingspanitem:nth-child(1)")).Text.Trim();
+                    var locText = item.FindElement(By.CssSelector("span.sectionmeetingspanitem:nth-child(2)")).Text.Trim();
+                    var parts = dtText.Split(' ');
+                    var daysPart = parts.ElementAtOrDefault(0) ?? string.Empty;
+                    var timeRaw = parts.ElementAtOrDefault(1) ?? string.Empty;
+                    string start12 = string.Empty, end12 = string.Empty;
+                    if (timeRaw.Contains('-'))
+                    {
+                        var timeParts = timeRaw.Split('-');
+                        var t0 = timeParts[0].Trim().Replace('.', ':');
+                        var t1 = timeParts[1].Trim().Replace('.', ':');
+
+                        // Add AM/PM designation if not present
+                        if (!t0.Contains("AM", StringComparison.OrdinalIgnoreCase) &&
+                            !t0.Contains("PM", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Assume hours less than 12 are AM, 12 is PM
+                            double hour;
+                            if (double.TryParse(t0, out hour))
+                            {
+                                t0 = hour < 12 ? $"{t0} AM" : $"{t0} PM";
+                            }
+                        }
+
+                        if (!t1.Contains("AM", StringComparison.OrdinalIgnoreCase) &&
+                            !t1.Contains("PM", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Assume hours less than 12 are AM, 12 and higher are PM
+                            double hour;
+                            if (double.TryParse(t1.Split(':')[0], out hour))
+                            {
+                                t1 = hour < 12 ? $"{t1} AM" : $"{t1} PM";
+                            }
+                        }
+
+                        DateTime startTime, endTime;
+                        if (DateTime.TryParse(t0, out startTime) && DateTime.TryParse(t1, out endTime))
+                        {
+                            start12 = startTime.ToString("h:mm tt");
+                            end12 = endTime.ToString("h:mm tt");
+                        }
+                        else
+                        {
+                            // Fallback for debugging
+                            Console.WriteLine($"Could not parse time: {timeRaw}, t0={t0}, t1={t1}");
+                        }
+                    }
+                    details.Meetings.Add(new MeetingInfo
+                    {
+                        Days = daysPart,
+                        Time = string.IsNullOrEmpty(start12) ? string.Empty : $"{start12} - {end12}",
+                        Location = locText
+                    });
+                }
                 var dlElement = driverInstance.FindElement(By.XPath("/html/body/div[1]/div[3]/div/div[2]/main/div[4]/div/div/dl"));
                 string? detailsHtml = dlElement.GetAttribute("outerHTML");
                 if(string.IsNullOrEmpty(detailsHtml))
                 {
-                    Console.WriteLine("No details found.");
+                    Console.WriteLine("/No details found.");
                     return details;
                 }
                 var doc = new HtmlDocument();
@@ -739,9 +808,6 @@
                             case "Cooperative":
                                 details.Cooperative = value;
                                 break;
-                            case "Meetings Info":
-                                details.MeetingsInfo.Add(value);
-                                break;
                             case "Instructor(s)":
                                 details.Instructors.Add(value);
                                 break;
@@ -779,7 +845,14 @@
             }
             return details;
         }
-        public static List<string> ConvertDetailsToStringList(CourseDescriptionDetails details)
+        public static string GetMeetingsInfoSummary( CourseDescriptionDetails details)
+            => details.Meetings.Any()
+                ? string.Join(", ", details.Meetings)
+                : string.Empty;
+    
+
+
+public static List<string> ConvertDetailsToStringList(CourseDescriptionDetails details)
         {
             var list = new List<string>();
 
@@ -821,6 +894,7 @@
                 list.Add(details.EndDate);
             if (!string.IsNullOrWhiteSpace(details.Footnotes))
                 list.Add(details.Footnotes);
+           
 
             return list;
         }

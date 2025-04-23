@@ -1,0 +1,64 @@
+﻿@page "/checkout"
+@using BlazorApp1.Services
+@using BlazorApp1.Components
+@using System.Linq
+@using static BlazorApp1.Components.Pages.Transcript
+@inject CartService Cart
+@inject DegreeService DegreeService
+@inject Transcript.StudentRecord student
+
+<h1>Your Degree Plan</h1>
+
+<select @bind="selectedMajor">
+    <option value="">-- choose a major --</option>
+    @foreach (var m in DegreeService.GetAllMajors())
+    {
+        <option value="@m.DegreeDescription">@m.DegreeDescription</option>
+    }
+</select>
+
+@if (!string.IsNullOrEmpty(selectedMajor))
+{
+    var major = DegreeService.GetAllMajors()
+                             .First(m => m.DegreeDescription == selectedMajor);
+    <h2>@major.DegreeDescription Requirements</h2>
+    <table class="table">
+        <thead>
+            <tr><th>Course</th><th>Credits</th><th>Mark Complete</th></tr>
+        </thead>
+        <tbody>
+            @foreach (var cr in major.CourseRequirements)
+            {
+                <tr>
+                    <td>@cr.Name</td>
+                    <td>@cr.Credits</td>
+                    <td>
+                        <input type="checkbox"
+                               @onchange="_ => ToggleCompletion(cr.Name)"
+                               checked="@student.HasCompleted(cr.Name)" />
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+@code {
+    string? selectedMajor;
+
+    void ToggleCompletion(string courseName)
+    {
+        // We treat "complete" as "Not-Taken" vs "Got a grade":
+        string? creditStr = DegreeService.GetCredit(selectedMajor, courseName);
+        int credits = 0;
+        if (!string.IsNullOrEmpty(creditStr) && int.TryParse(creditStr, out int parsedCredits))
+        {
+            credits = parsedCredits;
+        }
+
+        if (student.HasCompleted(courseName))
+            student.SetGrade(courseName, credits, "Not-Taken");
+        else
+            student.SetGrade(courseName, credits, "A"); // or prompt for actual grade
+    }
+
+}
