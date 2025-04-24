@@ -1,77 +1,593 @@
-﻿@page "/degrees"
-@using System.Text.RegularExpressions
-@using System.Net    
+@page "/checkout"
 @using BlazorApp1.Services
+@using BlazorApp1.Components
+@using System.Linq
+@using static BlazorApp1.Components.Pages.Transcript
 @inject CartService Cart
 @inject DegreeService DegreeService
-@inject IJSRuntime JS
+@inject Transcript.StudentRecord student
 
-<h1>Available Degrees</h1>
+<div class="container">
+    <h1 class="mb-4">Your Degree Plan</h1>
 
-@* pull your majors/minors from your DegreeDataService *@
-@foreach (var major in DegreeService.GetAllMajors())
-{
-    <div class="card mb-3">
-        <div class="card-body">
-            <h5 class="card-title">@major.Header</h5>
-            <ul>
-                @foreach (var line in major.StructuredOutput)
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <div class="input-group">
+                <input type="text" class="form-control" 
+                       @bind-value="searchTerm" 
+                       @bind-value:event="oninput"
+                       @onkeyup="FilterDegrees"
+                       placeholder="Search for a degree..." />
+                <button class="btn btn-primary" @onclick="ClearSearch">Clear</button>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(searchTerm) && filteredDegrees.Any())
+    {
+        <div class="degree-search-results mb-4">
+            <h5>Search Results:</h5>
+            <ul class="list-group">
+                @foreach (var degree in filteredDegrees.Take(5))
                 {
-                    <li>
-                        @((MarkupString)RenderLineWithFootnotes(line, major.Footnotes))
+                    <li class="list-group-item list-group-item-action" @onclick="() => SelectDegree(degree.DegreeDescription)">
+                        @degree.DegreeDescription
                     </li>
                 }
             </ul>
-            <h3>@major.DegreeDescription (@major.TotalCredits credits)</h3>
-
-            <table class="table">
-                <thead>
-                    <tr><th>Course</th><th>Credits</th></tr>
-                </thead>
-                <tbody>
-                    @foreach (var cr in major.CourseRequirements)
-                    {
-                        <tr>
-                            <td>@cr.Name</td>
-                            <td>@cr.Credits</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-            <button class="btn btn-sm btn-outline-primary"
-            @onclick="() => Cart.Add(major)">
-                Add to cart
-            </button>
         </div>
-    </div>
-}
-
-@code {
-    string RenderLineWithFootnotes(string line, Dictionary<string, string> fn)
-    {
-        return Regex.Replace(line, @"<sup>(\d+)</sup>", m =>
-        {
-            var key = m.Groups[1].Value;
-            var note = fn.ContainsKey(key) ? fn[key] : "";
-            return
-      $"<a href=\"#\" tabindex=\"0\" class=\"text-decoration-none\" " +
-      $"data-bs-toggle=\"popover\" data-bs-trigger=\"hover focus\" " +
-      $"title=\"Footnote {key}\" data-bs-content=\"{WebUtility.HtmlEncode(note)}\">" +
-      $"<sup>{key}</sup></a>";
-        });
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    @if (!string.IsNullOrEmpty(selectedMajor))
     {
-        if (firstRender)
-        {
-            try
-            {
+        var major = DegreeService.GetAllMajors()
+                                .First(m => m.DegreeDescription == selectedMajor);
+        
+        <div class="card mb-4">
+            <div class="card-header">
+                <h2>@major.DegreeDescription</h2>
+                @if (major.CreditRequirement.HasValue)
+                {
+                    <p class="lead">Total Credits Required: @major.CreditRequirement</p>
+                }
+            </div>
 
-                // bootstrap popover initializer, assumes you have bootstrap.js registered
-                await JS.InvokeVoidAsync("bootstrap.Popover", ".card [data-bs-toggle=popover]");
-            }
-            catch { }
+            <div class="card-body">
+                @if (!string.IsNullOrEmpty(major.Description))
+                {
+                    <div class="mb-4">
+                        <p>@major.Description</p>
+                    </div>
+                }
+
+                @{
+                    string currentYear = "";
+                    string currentTerm = "";
+                }
+
+                @foreach (var output in major.StructuredOutput)
+                {
+                    if (output.StartsWith("====== "))
+                    {
+                        currentYear = output.Replace("====== ", "").Replace(" ======", "");
+                        <h3 class="mt-4">@currentYear</h3>
+                    }
+                    else if (output.StartsWith("---- "))
+                    {
+                        currentTerm = output.Replace("---- ", "").Replace(" ----", "");
+                        <h4 class="mt-3">@currentTerm</h4>
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Course</th>
+                                        <th>Credits</th>
+                                        <th>Mark Complete</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @{
+                                        var termCourses = major.CourseRequirements
+                                            .Where(c => major.StructuredOutput.IndexOf($"---- {currentTerm} ----") < 
+                                                      major.StructuredOutput.IndexOf($"Course: {c.Name}, Credits: {c.Credits}") &&
+                                                      (major.StructuredOutput.IndexOf($"---- {GetNextTerm(major.StructuredOutput, currentTerm)} ----") == -1 ||
+                                                       major.StructuredOutput.IndexOf($"Course: {c.Name}, Credits: {c.Credits}") < 
+                                                       major.StructuredOutput.IndexOf($"---- {GetNextTerm(major.StructuredOutput, currentTerm)} ----")))
+                                            .ToList();
+                                    }
+                                    @foreach (var cr in termCourses)
+                                    {
+                                        <tr>
+                                            <td>
+                                                @{
+                                                    string displayName = cr.Name;
+                                                    string footnoteKey = "";
+                                                    
+                                                    var footnoteMatch = System.Text.RegularExpressions.Regex.Match(cr.Name, @"(\d+)$");
+                                                    if (footnoteMatch.Success)
+                                                    {
+                                                        footnoteKey = footnoteMatch.Groups[1].Value;
+                                                        displayName = cr.Name.Substring(0, cr.Name.Length - footnoteKey.Length);
+                                                    }
+                                                }
+                                                @displayName
+                                                @if (!string.IsNullOrEmpty(footnoteKey) && major.Footnotes.ContainsKey(footnoteKey))
+                                                {
+                                                    <sup>@footnoteKey</sup>
+                                                    <div class="footnote-text small text-muted">
+                                                        @major.Footnotes[footnoteKey]
+                                                    </div>
+                                                }
+                                            </td>
+                                            <td>@cr.Credits</td>
+                                            <td>
+                                                <input type="checkbox"
+                                                       @onchange="_ => ToggleCompletion(cr.Name)"
+                                                       checked="@student.HasCompleted(cr.Name)" />
+                                            </td>
+                                            <td>
+                                                @if (cr.Name.Contains("UCORE"))
+                                                {
+                                                    <button class="btn btn-sm btn-outline-primary" @onclick="() => OpenUCORESelector(cr)">
+                                                        Select UCORE course
+                                                    </button>
+                                                }
+                                                else if (cr.Name.Contains("Elective") || HasFootnoteForSubstitution(cr.Name, major.Footnotes))
+                                                {
+                                                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => OpenCourseSelector(cr)">
+                                                        Select course
+                                                    </button>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    else if (output.StartsWith("Message: "))
+                    {
+                        <div class="alert alert-info">
+                            @output.Substring("Message: ".Length)
+                        </div>
+                    }
+                }
+
+                @if (major.Footnotes.Count > 0)
+                {
+                    <div class="mt-4">
+                        <h4>Footnotes</h4>
+                        <ol>
+                            @foreach (var kvp in major.Footnotes)
+                            {
+                                <li id="footnote-@kvp.Key">@kvp.Value</li>
+                            }
+                        </ol>
+                    </div>
+                }
+            </div>
+
+            <div class="card-footer">
+                <button class="btn btn-success" @onclick="AddToCart">Add to Cart</button>
+            </div>
+        </div>
+    }
+
+    @if (showUCORESelector)
+    {
+        <div class="modal" style="display: block; background-color: rgba(0,0,0,0.5);">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Select UCORE Course</h5>
+                        <button type="button" class="btn-close" @onclick="CloseUCORESelector"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="input-group mb-3">
+                            <input type="text" class="form-control" @bind-value="ucoreSearchTerm" 
+                                   placeholder="Search for UCORE courses..." />
+                        </div>
+                        
+                        <div class="ucore-categories">
+                            <div class="d-flex flex-wrap">
+                                @foreach (string category in ucoreCategories)
+                                {
+                                    <button class="btn @(selectedUCORECategory == category ? "btn-primary" : "btn-outline-primary") m-1" 
+                                            @onclick="() => SelectUCORECategory(category)">
+                                        @category
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                        
+                        <div class="mt-3">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Course</th>
+                                        <th>Credits</th>
+                                        <th>Description</th>
+                                        <th>Select</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var course in filteredUCORECourses)
+                                    {
+                                        <tr>
+                                            <td>@course.Name</td>
+                                            <td>@course.Credits</td>
+                                            <td>@course.Description</td>
+                                            <td>
+                                                <button class="btn btn-sm btn-primary" 
+                                                        @onclick="() => SelectUCORECourse(course)">
+                                                    Select
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseUCORESelector">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (showCourseSelector)
+    {
+        <div class="modal" style="display: block; background-color: rgba(0,0,0,0.5);">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Select Course</h5>
+                        <button type="button" class="btn-close" @onclick="CloseCourseSelector"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="input-group mb-3">
+                            <input type="text" class="form-control" @bind-value="courseSearchTerm" 
+                                   placeholder="Search for courses..." />
+                        </div>
+                        
+                        <div class="mt-3">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Course</th>
+                                        <th>Credits</th>
+                                        <th>Select</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var course in filteredSubstitutionCourses)
+                                    {
+                                        <tr>
+                                            <td>@course.Name</td>
+                                            <td>@course.Credits</td>
+                                            <td>
+                                                <button class="btn btn-sm btn-primary" 
+                                                        @onclick="() => SelectSubstitutionCourse(course)">
+                                                    Select
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseCourseSelector">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    
+    @if (Cart.Items.Any())
+    {
+        <div class="card mt-4">
+            <div class="card-header">
+                <h3>Your Cart</h3>
+            </div>
+            <div class="card-body">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Degree</th>
+                            <th>Type</th>
+                            <th>Credits</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Cart.Items)
+                        {
+                            <tr>
+                                <td>@item.Name</td>
+                                <td>@item.Type</td>
+                                <td>@item.Credits</td>
+                                <td>
+                                    <button class="btn btn-sm btn-danger" @onclick="() => RemoveFromCart(item)">
+                                        Remove
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-footer">
+                <button class="btn btn-primary" @onclick="Checkout">
+                    Proceed to Transcript
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    string? selectedMajor;
+    string searchTerm = "";
+    List<Degree> filteredDegrees = new List<Degree>();
+    
+    // Course replacement variables
+    bool showUCORESelector = false;
+    bool showCourseSelector = false;
+    string ucoreSearchTerm = "";
+    string courseSearchTerm = "";
+    Major.CourseRequirement currentCourse;
+    List<CourseInfo> filteredUCORECourses = new List<CourseInfo>();
+    List<CourseInfo> filteredSubstitutionCourses = new List<CourseInfo>();
+    string selectedUCORECategory = "";
+    List<string> ucoreCategories = new List<string> { "ROOT", "COMM", "QUAN", "WRTG", "ARTS", "BSCI", "DIVR", "EQJS", "HUM", "PSCI", "SSCI" };
+    
+    // Custom course info model for simpler display
+    public class CourseInfo
+    {
+        public string Name { get; set; }
+        public string Credits { get; set; }
+        public string Description { get; set; } = "";
+        
+        public CourseInfo(string name, string credits, string description = "")
+        {
+            Name = name;
+            Credits = credits;
+            Description = description;
         }
+    }
+    
+    protected override void OnInitialized()
+    {
+        // Initialize with all degrees for search functionality
+        FilterDegrees();
+    }
+    
+    void FilterDegrees()
+    {
+        if (string.IsNullOrWhiteSpace(searchTerm))
+        {
+            filteredDegrees = DegreeService.GetAllMajors();
+        }
+        else
+        {
+            filteredDegrees = DegreeService.GetAllMajors()
+                .Where(d => d.DegreeDescription.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+    }
+    
+    void SelectDegree(string degreeName)
+    {
+        selectedMajor = degreeName;
+        searchTerm = "";
+        filteredDegrees.Clear();
+    }
+    
+    void ClearSearch()
+    {
+        searchTerm = "";
+        FilterDegrees();
+    }
+    
+    string GetNextTerm(List<string> outputs, string currentTerm)
+    {
+        int currentIndex = outputs.IndexOf($"---- {currentTerm} ----");
+        if (currentIndex == -1) return "";
+        
+        for (int i = currentIndex + 1; i < outputs.Count; i++)
+        {
+            if (outputs[i].StartsWith("---- ") && outputs[i].EndsWith(" ----"))
+            {
+                return outputs[i].Replace("---- ", "").Replace(" ----", "");
+            }
+        }
+        return "";
+    }
+    
+    bool HasFootnoteForSubstitution(string courseName, Dictionary<string, string> footnotes)
+    {
+        var footnoteMatch = System.Text.RegularExpressions.Regex.Match(courseName, @"(\d+)$");
+        if (footnoteMatch.Success)
+        {
+            string footnoteKey = footnoteMatch.Groups[1].Value;
+            if (footnotes.ContainsKey(footnoteKey))
+            {
+                string footnoteText = footnotes[footnoteKey];
+                return footnoteText.Contains("substitute") || footnoteText.Contains("approved") || 
+                       footnoteText.Contains("alternative") || footnoteText.Contains("or");
+            }
+        }
+        return false;
+    }
+    
+    void ToggleCompletion(string courseName)
+    {
+        // We treat "complete" as "Not-Taken" vs "Got a grade":
+        string? creditStr = DegreeService.GetCredit(selectedMajor, courseName);
+        int credits = 0;
+        if (!string.IsNullOrEmpty(creditStr) && int.TryParse(creditStr, out int parsedCredits))
+        {
+            credits = parsedCredits;
+        }
+
+        if (student.HasCompleted(courseName))
+            student.SetGrade(courseName, credits, "Not-Taken");
+        else
+            student.SetGrade(courseName, credits, "A"); // or prompt for actual grade
+    }
+    
+    void OpenUCORESelector(Major.CourseRequirement course)
+    {
+        currentCourse = course;
+        showUCORESelector = true;
+        selectedUCORECategory = "";
+        ucoreSearchTerm = "";
+        
+        // Get mock UCORE courses - replace with actual course data in production
+        filteredUCORECourses = GetMockUCORECourses();
+    }
+    
+    void CloseUCORESelector()
+    {
+        showUCORESelector = false;
+    }
+    
+    void SelectUCORECategory(string category)
+    {
+        selectedUCORECategory = category;
+        FilterUCORECourses();
+    }
+    
+    void FilterUCORECourses()
+    {
+        // In a real implementation, you would filter from your course service
+        // This is a mock implementation
+        var allCourses = GetMockUCORECourses();
+        
+        filteredUCORECourses = allCourses
+            .Where(c => (string.IsNullOrEmpty(selectedUCORECategory) || c.Name.Contains($"[{selectedUCORECategory}]")) &&
+                       (string.IsNullOrEmpty(ucoreSearchTerm) || 
+                        c.Name.Contains(ucoreSearchTerm, StringComparison.OrdinalIgnoreCase) || 
+                        c.Description.Contains(ucoreSearchTerm, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+    }
+    
+    void SelectUCORECourse(CourseInfo course)
+    {
+        // Replace the generic UCORE with the specific course
+        var major = DegreeService.GetAllMajors().First(m => m.DegreeDescription == selectedMajor);
+        int index = major.CourseRequirements.IndexOf(currentCourse);
+        if (index >= 0)
+        {
+            major.CourseRequirements[index] = new Major.CourseRequirement 
+            { 
+                Name = course.Name, 
+                Credits = course.Credits 
+            };
+        }
+        
+        CloseUCORESelector();
+    }
+    
+    void OpenCourseSelector(Major.CourseRequirement course)
+    {
+        currentCourse = course;
+        showCourseSelector = true;
+        courseSearchTerm = "";
+        
+        // Get courses that could substitute for this course
+        filteredSubstitutionCourses = GetSubstitutionCourses(course);
+    }
+    
+    void CloseCourseSelector()
+    {
+        showCourseSelector = false;
+    }
+    
+    List<CourseInfo> GetSubstitutionCourses(Major.CourseRequirement course)
+    {
+        // In a real implementation, you would use your course service
+        // This is a mock implementation
+        return new List<CourseInfo>
+        {
+            new CourseInfo($"MATH 171", "4", "Calculus I"),
+            new CourseInfo($"MATH 172", "4", "Calculus II"),
+            new CourseInfo($"MATH 273", "2", "Calculus III"),
+            new CourseInfo($"CS 121", "3", "Program Design and Development"),
+            new CourseInfo($"CS 166", "3", "Data Structures"),
+            new CourseInfo($"CS 223", "3", "Advanced Data Structures")
+        };
+    }
+    
+    void SelectSubstitutionCourse(CourseInfo course)
+    {
+        // Replace the course with the selected substitution
+        var major = DegreeService.GetAllMajors().First(m => m.DegreeDescription == selectedMajor);
+        int index = major.CourseRequirements.IndexOf(currentCourse);
+        if (index >= 0)
+        {
+            major.CourseRequirements[index] = new Major.CourseRequirement 
+            { 
+                Name = course.Name, 
+                Credits = course.Credits 
+            };
+        }
+        
+        CloseCourseSelector();
+    }
+    
+    List<CourseInfo> GetMockUCORECourses()
+    {
+        // This would come from your course service in a real implementation
+        return new List<CourseInfo>
+        {
+            new CourseInfo("HIST 105 [ROOT]", "3", "The Development of the United States"),
+            new CourseInfo("ANTH 101 [SSCI]", "3", "Introduction to Anthropology"),
+            new CourseInfo("BIOLOGY 102 [BSCI]", "4", "General Biology"),
+            new CourseInfo("CHEM 105 [PSCI]", "4", "Principles of Chemistry"),
+            new CourseInfo("ENGLISH 101 [WRTG]", "3", "Introductory Writing"),
+            new CourseInfo("COM 102 [COMM]", "3", "Public Speaking"),
+            new CourseInfo("MATH 105 [QUAN]", "3", "Mathematical Reasoning"),
+            new CourseInfo("FINE ARTS 101 [ARTS]", "3", "Introduction to Art"),
+            new CourseInfo("PHIL 103 [HUM]", "3", "Introduction to Philosophy"),
+            new CourseInfo("SOC 101 [DIVR]", "3", "Introduction to Sociology"),
+            new CourseInfo("POL_S 101 [EQJS]", "3", "American National Government")
+        };
+    }
+    
+    void AddToCart()
+    {
+        if (string.IsNullOrEmpty(selectedMajor)) return;
+        
+        var major = DegreeService.GetAllMajors().First(m => m.DegreeDescription == selectedMajor);
+        Cart.AddItem(new CartItem 
+        { 
+            Name = major.DegreeDescription, 
+            Type = "Major", 
+            Credits = major.CreditRequirement ?? major.TotalCredits 
+        });
+    }
+    
+    void RemoveFromCart(CartItem item)
+    {
+        Cart.RemoveItem(item);
+    }
+    
+    void Checkout()
+    {
+        // This would navigate to the transcript page
+        // In a real implementation, you'd pass the cart data to the transcript page
+    }
+    
+    public class CartItem
+    {
+        public string Name { get; set; }
+        public string Type { get; set; }
+        public int Credits { get; set; }
     }
 }
