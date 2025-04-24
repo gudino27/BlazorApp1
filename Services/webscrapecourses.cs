@@ -1,4 +1,4 @@
-﻿namespace BlazorApp1.Services
+namespace BlazorApp1.Services
 {
     using OpenQA.Selenium;
     using OpenQA.Selenium.Chrome;
@@ -124,13 +124,15 @@
         {
             var watch = System.Diagnostics.Stopwatch.StartNew();
             var options = new ChromeOptions();
+	    var userDataDir = Path.Combine(Path.GetTempPath(), "chrome_profiles", Guid.NewGuid().ToString());
+	    Directory.CreateDirectory(userDataDir);
             options.AddArgument("--disable-usb");
             options.AddArgument("--disable-usb-discovery");
             options.AddArgument("--headless");
             options.AddArgument("--log-level=3");
             options.AddArgument("--disable-gpu");
             options.AddArgument("--disable-logging");
-
+	    options.AddArgument($"--user-data-dir={userDataDir}");
             var service = ChromeDriverService.CreateDefaultService();
             service.SuppressInitialDiagnosticInformation = true;
             service.HideCommandPromptWindow = true;
@@ -156,7 +158,7 @@
             {
                 mainDriver.Navigate().GoToUrl("https://schedules.wsu.edu");
 
-                for (int i = 1; i <= 1; i++)
+                for (int i = 1; i <= 6; i++)
                 {
                     for (int j = 3; j <= 3; j++)
                     {
@@ -350,7 +352,7 @@
             }
             // Console.WriteLine($"Expected subjects count: {expectedSubjects.Count}");
 
-            int partitionCount = Math.Min(30, rowCount);
+            int partitionCount = Math.Min(5, rowCount);
             int basePartitionSize = rowCount / partitionCount;
             int remainder = rowCount % partitionCount;
             var partitions = new List<(int start, int end)>();
@@ -372,12 +374,16 @@
             var tasks = partitions.Select(partition => Task.Run(() =>
             {
                 var courseOptions = new ChromeOptions();
+		string profileDir = Path.Combine(Path.GetTempPath(),
+    "chrome_profiles", Guid.NewGuid().ToString());
+Directory.CreateDirectory(profileDir);
                 courseOptions.AddArgument("--disable-usb");
                 courseOptions.AddArgument("--disable-usb-discovery");
                 courseOptions.AddArgument("--headless");
                 courseOptions.AddArgument("--log-level=3");
                 courseOptions.AddArgument("--disable-gpu");
                 courseOptions.AddArgument("--disable-logging");
+		courseOptions.AddArgument($"--user-data-dir={profileDir}");
 
                 var courseService = ChromeDriverService.CreateDefaultService();
                 courseService.SuppressInitialDiagnosticInformation = true;
@@ -434,12 +440,16 @@
             {
                 Console.WriteLine($"Retrying missing subjects: {string.Join(", ", missingSubjects)}");
                 var courseOptions = new ChromeOptions();
+		string profileDir = Path.Combine(Path.GetTempPath(),
+    "chrome_profiles", Guid.NewGuid().ToString());
+Directory.CreateDirectory(profileDir);
                 courseOptions.AddArgument("--disable-usb");
                 courseOptions.AddArgument("--disable-usb-discovery");
                 courseOptions.AddArgument("--headless");
                 courseOptions.AddArgument("--log-level=3");
                 courseOptions.AddArgument("--disable-gpu");
                 courseOptions.AddArgument("--disable-logging");
+		courseOptions.AddArgument($"--user-data-dir={profileDir}");
 
                 var courseService = ChromeDriverService.CreateDefaultService();
                 courseService.SuppressInitialDiagnosticInformation = true;

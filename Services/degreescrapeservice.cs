@@ -190,7 +190,7 @@
 
                 // Determine optimal number of browser instances
                 int coreCount = Environment.ProcessorCount;
-                int numInstances = Math.Max(2, Math.Min(8, coreCount / 2));
+                int numInstances = Math.Max(2, Math.Min(8, (coreCount / 2)+1));
                 Console.WriteLine($"Detected {coreCount} logical processors. Using {numInstances} persistent browser instances.\n");
 
                 // Create a thread-safe collection for results
@@ -378,7 +378,8 @@
                     }
 
                     completedCount++;
-                    Console.WriteLine($"Thread: {instanceId} has Completed {(completedCount / batch.Count)*100}%");
+                    double progress = (double)completedCount / batch.Count * 100;                    
+                    Console.WriteLine($"Thread: {instanceId} has Completed {progress:F1}%");
                 }
                 catch (Exception ex)
                 {

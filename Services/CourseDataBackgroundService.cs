@@ -1,4 +1,4 @@
-﻿namespace BlazorApp1.Services
+namespace BlazorApp1.Services
 {
     using System;
     using System.Linq;

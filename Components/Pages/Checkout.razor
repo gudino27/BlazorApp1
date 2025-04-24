@@ -427,7 +427,7 @@
 
     void ToggleCompletion(string courseName)
     {
-        // We treat "complete" as "Not-Taken" vs "Got a grade":
+        //  treat "complete" as "Not-Taken" vs "Got a grade":
         if (selectedMajor == null) return;
 
         string? creditStr = DegreeService.GetCredit(selectedMajor, courseName);
@@ -440,7 +440,7 @@
         if (student.HasCompleted(courseName))
             student.SetGrade(courseName, credits, "Not-Taken");
         else
-            student.SetGrade(courseName, credits, "A"); // or prompt for actual grade
+            student.SetGrade(courseName, credits, "A"); // need to adjust to prompt for actual grade
     }
 
     void OpenUCORESelector(Major.CourseRequirement course)
@@ -467,7 +467,7 @@
 
     void FilterUCORECourses()
     {
-        // In a real implementation, you would filter from your course service
+
         // This is a mock implementation
         var allCourses = GetMockUCORECourses();
 
@@ -515,7 +515,7 @@
 
     List<CourseInfo> GetSubstitutionCourses(Major.CourseRequirement course)
     {
-        // In a real implementation, you would use your course service
+
         // This is a mock implementation
         return new List<CourseInfo>
         {
@@ -527,7 +527,7 @@
     {
         if (currentCourse == null || selectedMajor == null) return;
 
-        // Replace the course with the selected substitution
+
         var major = DegreeService.GetAllMajors().First(m => m.DegreeDescription == selectedMajor);
         int index = major.CourseRequirements.IndexOf(currentCourse);
         if (index >= 0)
@@ -544,7 +544,7 @@
 
     List<CourseInfo> GetMockUCORECourses()
     {
-        // This would come from your course service in a real implementation
+
         return new List<CourseInfo>
         {
 
@@ -572,7 +572,7 @@
     void ProcessCheckout()
     {
         // This would navigate to the transcript page
-        // In a real implementation, you'd pass the cart data to the transcript page
+
     }
 
     public class CartItem

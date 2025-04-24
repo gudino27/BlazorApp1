@@ -166,16 +166,16 @@
     // ------------------- THE WEEKLY SCHEDULE RENDERING --------------------
     //
 
-    // A simple approach: Render a table from 8:00 AM to 6:00 PM, Monday-Friday.
-    // We'll parse the section's "Days" and "Time" to see if it belongs in each cell.
+    // A simple approach: Render a table from 8:00 AM to 10:00 PM, Monday-Friday.
+    //  parse the section's "Days" and "Time" to see if it belongs in each cell.
     private RenderFragment RenderWeeklyCalendar() => builder =>
     {
-        // We'll define a small list for days, using single-letter codes that appear in your scraped data:
+        // We'll define a small list for days, using single-letter codes that appear in scraped data:
         var days = new[] { 'M', 'T', 'W', 'H', 'F' };
 
         // Hours range
         var startHour = 8;
-        var endHour = 18; // 6pm
+        var endHour = 22; // 10pm
 
         int seq = 0;
         builder.OpenElement(seq++, "table");
@@ -241,17 +241,17 @@
         builder.CloseElement(); // </table>
     };
 
-    // Simple helper method that checks if a given SectionData belongs in a particular day/hour cell.
+    //  helper method that checks if a given SectionData belongs in a particular day/hour cell.
     private bool MatchesDayAndHour(SectionData section, char dayChar, int hour)
     {
         // 1) Check if the section's Days contain this dayChar
         //    e.g. Days = "M,W,F" => we see if dayChar is 'M', 'W', or 'F'
         if (string.IsNullOrWhiteSpace(section.Days)) return false;
         if (!section.Days.Contains(dayChar)) return false;
-        // If your data uses "M,W,F" or "M W F" or "MWF" or "TTh", you'll need to adapt this logic.
+        // data uses "M,W,F" , need to adapt better logic.
 
         // 2) Parse the section's start time from e.g. "9:10-10:00"
-        //    We'll just look at the start hour (9 in this example).
+        //     look at the start hour (9 in this example).
         if (string.IsNullOrWhiteSpace(section.Time)) return false;
         var dashIndex = section.Time.IndexOf('-');
         if (dashIndex < 1) return false; // no dash => can't parse
@@ -263,8 +263,7 @@
         var hourStr = startTime.Substring(0, colonIndex); // "9"
         if (!int.TryParse(hourStr, out int parsedHour)) return false;
 
-        // This is extremely naive: if the parsedHour == 'hour' from the table, we match
-        // (In real usage, you'd compare minutes, end time, etc. to see if it overlaps.)
+        
         return (parsedHour == hour);
     }
 }
