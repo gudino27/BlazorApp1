@@ -31,46 +31,39 @@
         <hr />
 
         <!-- Search Controls -->
-        <button class="btn btn-secondary" @onclick="ToggleSearch">@(ShowSearchForm ? "Hide" : "Show") Course Search</button>
+        <div class="search-container mt-3">
+            <input class="form-control" placeholder="Search courses..." 
+                   @bind-value="SearchQuery" 
+                   @bind-value:event="oninput" 
+                   @onkeyup="FilterCourses" />
 
-        @if (ShowSearchForm)
-        {
-            <div class="course-search mt-3">
-                <input class="form-control" placeholder="Type course name or number..." @bind="SearchQuery" @bind:event="oninput" />
-                <div class="search-results">
-                    @if (FilteredCourses.Any())
-                    {
-                        <ul class="list-group mt-2">
-                            @foreach (var course in FilteredCourses)
-                            {
-                                <li class="list-group-item course-item" @onclick="() => SelectCourse(course)">
-                                    <div class="course-name">@course.CourseName</div>
-                                    <div class="course-title">@course.Title</div>
-                                </li>
-                            }
-                        </ul>
-                    }
-                    else if (!string.IsNullOrEmpty(SearchQuery))
-                    {
-                        <div class="no-results">No courses found matching "@SearchQuery"</div>
-                    }
-                </div>
+            <div class="search-results mt-2">
+                @if (FilteredCourses.Any())
+                {
+                    <ul class="list-group">
+                        @foreach (var course in FilteredCourses.Take(10)) @* Limited to 10 courses *@
+                        {
+                            <li class="list-group-item course-item" @onclick="() => SelectCourse(course)">
+                                <div class="course-name">@course.CourseName</div>
+                                <div class="course-title small text-muted">@course.Title</div>
+                            </li>
+                        }
+                    </ul>
+                }
+                else if (!string.IsNullOrEmpty(SearchQuery))
+                {
+                    <div class="no-results">No courses found matching "@SearchQuery"</div>
+                }
             </div>
-        }
-
-        <!-- Credit Summary -->
-        <div class="credit-summary mt-3">
-            <h5>Credit Summary</h5>
-            <div class="credit-total">Total Credits: @TotalCredits</div>
-            <div class="course-count">Courses: @ScheduledSections.Count</div>
         </div>
 
         <!-- Selected Course Details -->
         @if (SelectedCourse != null)
         {
             <div class="selected-course mt-3">
-                <h4>@SelectedCourse.CourseName</h4>
-                <div class="course-title mb-2">@SelectedCourse.Title</div>
+                <h5>@SelectedCourse.CourseName</h5>
+                <div class="course-title mb-2 small">@SelectedCourse.Title</div>
+
                 <div class="sections-list">
                     @foreach (var sec in SelectedCourse.Sections)
                     {
@@ -85,12 +78,86 @@
                 </div>
             </div>
         }
+
+        <!-- Credit Summary -->
+        <div class="credit-summary mt-3">
+            <h5>Credit Summary</h5>
+            <div class="credit-total">Total Credits: @TotalCredits</div>
+            <div class="course-count">Courses: @ScheduledSections.Count</div>
+        </div>
+
+        <!-- Scheduled Courses List -->
+        <div class="scheduled-courses mt-3">
+            <h5>My Schedule</h5>
+            @foreach (var scheduled in ScheduledSections)
+            {
+                <div class="scheduled-course-item">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>@scheduled.Course.CourseName</span>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveSection(scheduled)">
+                            <i class="bi bi-x"></i>
+                        </button>
+                    </div>
+                    <div class="small text-muted">@FormatDaysTime(scheduled)</div>
+                </div>
+            }
+        </div>
     </div>
 
     <div class="schedule-panel">
-        <!-- RENDER THE WEEKLY SCHEDULE -->
-
-        @RenderWeeklyCalendar()
+        <div class="weekly-schedule">
+            <table class="schedule-table">
+                <thead>
+                    <tr>
+                        <th class="time-header">Time</th>
+                        <th>Monday</th>
+                        <th>Tuesday</th>
+                        <th>Wednesday</th>
+                        <th>Thursday</th>
+                        <th>Friday</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{
+                        var startHour = 7; // 7 AM
+                        var endHour = 23;  // 11 PM
+                        
+                        for (int hour = startHour; hour < endHour; hour++)
+                        {
+                            <tr class="hour-row">
+                                <td class="time-cell">@FormatHour(hour)</td>
+                                @for (int day = 0; day < 5; day++)
+                                {
+                                    <td class="day-cell" id="cell-@day-@hour"></td>
+                                }
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+        
+        @foreach (var scheduled in ScheduledSections)
+        {
+            @if (scheduled.Days.Any() && scheduled.StartTime.Hours >= startHour && scheduled.StartTime.Hours < endHour)
+            {
+                foreach (var day in scheduled.Days)
+                {
+                    int dayIndex = GetDayIndex(day);
+                    if (dayIndex >= 0)
+                    {
+                        <div class="course-block @GetCourseColorClass(scheduled)"
+                             style="@GetCoursePositionStyle(scheduled, dayIndex)">
+                            <div class="course-block-header">@scheduled.Course.CourseName</div>
+                            <div class="course-block-time">
+                                @scheduled.StartTime.ToString("h:mm tt") - @scheduled.EndTime.ToString("h:mm tt")
+                            </div>
+                            <div class="course-block-location">@scheduled.Section.Location</div>
+                        </div>
+                    }
+                }
+            }
+        }
     </div>
 </div>
 
@@ -100,7 +167,7 @@
     <div class="section-detail-modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h4>@(SelectedCourse?.CourseName) Section @DisplayedSection.SectionNumber</h4>
+                <h5 class="modal-title">@(SelectedCourse?.CourseName) Section @DisplayedSection.SectionNumber</h5>
                 <button type="button" class="close-button" @onclick="@(() => DisplayedSection = null)">×</button>
             </div>
             <div class="modal-body">
@@ -144,57 +211,29 @@
 
                 @if (GetCourseDescriptionDetails(DisplayedSection) != null)
                 {
+                    var details = GetCourseDescriptionDetails(DisplayedSection);
                     <div class="section-extra-details">
                         <h5>Course Details</h5>
-                        @{
-                            var details = GetCourseDescriptionDetails(DisplayedSection);
-                            if (!string.IsNullOrEmpty(details.CourseDescription))
-                            {
-                                <div class="detail-item">
-                                    <div class="detail-label">Description:</div>
-                                    <div class="detail-value">@details.CourseDescription</div>
-                                </div>
-                            }
-                            if (!string.IsNullOrEmpty(details.CoursePrerequisite))
-                            {
-                                <div class="detail-item">
-                                    <div class="detail-label">Prerequisites:</div>
-                                    <div class="detail-value">@details.CoursePrerequisite</div>
-                                </div>
-                            }
-                            if (!string.IsNullOrEmpty(details.SpecialCourseFee))
-                            {
-                                <div class="detail-item">
-                                    <div class="detail-label">Special Fee:</div>
-                                    <div class="detail-value">@details.SpecialCourseFee</div>
-                                </div>
-                            }
-                            if (!string.IsNullOrEmpty(details.UCORE))
-                            {
-                                <div class="detail-item">
-                                    <div class="detail-label">UCORE:</div>
-                                    <div class="detail-value">@details.UCORE</div>
-                                </div>
-                            }
-                            if (!string.IsNullOrEmpty(details.InstructionMode))
-                            {
-                                <div class="detail-item">
-                                    <div class="detail-label">Instruction Mode:</div>
-                                    <div class="detail-value">@details.InstructionMode</div>
-                                </div>
-                            }
-                            if (details.Meetings.Any())
-                            {
-                                <div class="detail-item">
-                                    <div class="detail-label">Meeting Times:</div>
-                                    <div class="detail-value">
-                                        @foreach (var meeting in details.Meetings)
-                                        {
-                                            <div>@meeting.Days @meeting.Time - @meeting.Location</div>
-                                        }
-                                    </div>
-                                </div>
-                            }
+                        @if (!string.IsNullOrEmpty(details.CourseDescription))
+                        {
+                            <div class="detail-item">
+                                <div class="detail-label">Description:</div>
+                                <div class="detail-value">@details.CourseDescription</div>
+                            </div>
+                        }
+                        @if (!string.IsNullOrEmpty(details.CoursePrerequisite))
+                        {
+                            <div class="detail-item">
+                                <div class="detail-label">Prerequisites:</div>
+                                <div class="detail-value">@details.CoursePrerequisite</div>
+                            </div>
+                        }
+                        @if (!string.IsNullOrEmpty(details.UCORE))
+                        {
+                            <div class="detail-item">
+                                <div class="detail-label">UCORE:</div>
+                                <div class="detail-value">@details.UCORE</div>
+                            </div>
                         }
                     </div>
                 }
@@ -202,8 +241,8 @@
                 <div class="modal-actions">
                     @if (IsScheduleConflict(DisplayedSection))
                     {
-                        <div class="conflict-alert">
-                             This section conflicts with your current schedule
+                        <div class="conflict-alert mb-2">
+                            ⚠️ This section conflicts with your current schedule
                         </div>
                     }
                     <button class="btn @(IsScheduleConflict(DisplayedSection) ? "btn-warning" : "btn-success")" 
@@ -220,28 +259,112 @@
     .scheduler-container {
         display: flex;
         gap: 20px;
+        height: calc(100vh - 150px);
+        overflow: hidden;
     }
 
     .selection-panel {
-        flex: 1;
-        min-width: 300px;
-        max-width: 400px;
+        flex: 0 0 320px;
+        overflow-y: auto;
+        padding-right: 10px;
     }
 
     .schedule-panel {
-        flex: 2;
+        flex: 1;
+        position: relative;
+        overflow-y: auto;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background-color: #fff;
     }
+
+    .weekly-schedule {
+        width: 100%;
+    }
+
+    .schedule-table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+    }
+
+    .schedule-table th, .schedule-table td {
+        border: 1px solid #ddd;
+        padding: 0;
+        text-align: center;
+        height: 60px;
+    }
+
+    .schedule-table th {
+        background-color: #f8f9fa;
+        padding: 8px 4px;
+        font-weight: 500;
+        line-height: 1.2;
+    }
+
+    .time-header {
+        width: 80px;
+    }
+
+    .time-cell {
+        padding: 5px;
+        text-align: center;
+        font-size: 0.8rem;
+        color: #666;
+    }
+
+    .day-cell {
+        position: relative;
+    }
+
+    .course-block {
+        position: absolute;
+        width: 100%;
+        left: 0;
+        z-index: 10;
+        border-radius: 4px;
+        padding: 5px;
+        overflow: hidden;
+        font-size: 0.85rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    }
+
+    .course-block-header {
+        font-weight: bold;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .course-block-time, .course-block-location {
+        font-size: 0.75rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .course-color-1 { background-color: #cfc; border: 1px solid #090; }
+    .course-color-2 { background-color: #ccf; border: 1px solid #009; }
+    .course-color-3 { background-color: #fcc; border: 1px solid #900; }
+    .course-color-4 { background-color: #ffc; border: 1px solid #990; }
+    .course-color-5 { background-color: #fcf; border: 1px solid #909; }
+    .course-color-6 { background-color: #cff; border: 1px solid #099; }
 
     .course-item {
         cursor: pointer;
+        padding: 8px;
     }
 
     .course-item:hover {
         background-color: #f0f0f0;
     }
 
+    .course-name {
+        font-weight: 500;
+    }
+
     .section-item {
-        padding: 10px;
+        padding: 8px;
         margin: 5px 0;
         border: 1px solid #ddd;
         border-radius: 4px;
@@ -256,45 +379,9 @@
         border-left: 4px solid orange;
     }
 
-    .status-open {
-        color: green;
-    }
-
-    .status-full {
-        color: red;
-    }
-
-    .status-waitlist {
-        color: orange;
-    }
-
-    .weekly-calendar {
-        width: 100%;
-        border-collapse: collapse;
-    }
-
-    .weekly-calendar th, .weekly-calendar td {
-        border: 1px solid #ddd;
-    }
-
-    .weekly-calendar th {
-        background-color: #f5f5f5;
-        text-align: center;
-    }
-
-    .calendar-event {
-        background-color: #e3f2fd;
-        padding: 2px 4px;
-        margin: 1px;
-        font-size: 12px;
-        border-radius: 3px;
-        overflow: hidden;
-    }
-
-    .calendar-event.conflict {
-        background-color: #ffebee;
-        border-left: 3px solid red;
-    }
+    .status-open { color: green; }
+    .status-full { color: red; }
+    .status-waitlist { color: orange; }
 
     .section-detail-modal {
         position: fixed;
@@ -311,7 +398,7 @@
 
     .modal-content {
         background-color: white;
-        width: 80%;
+        width: 90%;
         max-width: 600px;
         max-height: 90vh;
         border-radius: 4px;
@@ -321,6 +408,7 @@
     .modal-header {
         display: flex;
         justify-content: space-between;
+        align-items: center;
         padding: 15px;
         border-bottom: 1px solid #ddd;
     }
@@ -365,65 +453,36 @@
 
     .conflict-alert {
         color: red;
-        margin-bottom: 10px;
     }
 
     .credit-input {
         width: 60px;
     }
-    .weekly-schedule-container {
-    width: 100%;
-    overflow-x: auto;
-}
 
-.arranged-header {
-    background-color: #f5f5f5;
-}
-
-.arranged-title {
-    font-weight: bold;
-    text-align: center;
-    padding: 10px;
-    border-top: 2px solid #ddd;
-}
-
-.arranged-course {
-    background-color: #fafafa;
-}
-
-.calendar-event.arranged {
-    background-color: #f5f8fa;
-    padding: 8px;
-    margin: 4px 0;
-    border-left: 3px solid #87CEEB;
-}
-
-.event-instructor {
-    font-size: 11px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
+    .scheduled-course-item {
+        padding: 8px;
+        margin-bottom: 8px;
+        background-color: #f8f9fa;
+        border-radius: 4px;
+        border-left: 4px solid #6c757d;
+    }
 </style>
 
 @code {
     List<string> AvailableCampuses = new() { "Everett", "Global", "Pullman", "Spokane", "Tri-Cities", "Vancouver" };
     List<string> AvailableTerms = new() { "Fall 2025", "Spring 2025", "Summer 2025" };
 
-    string SelectedCampus { get; set; } = "Everett";
+    string SelectedCampus { get; set; } = "Pullman";
     string SelectedTerm { get; set; } = "Fall 2025";
 
     List<CourseData> AllLoadedCourses = new();
-    List<CourseData> CoursesToDisplay = new();
-
-    bool ShowSearchForm { get; set; } = false;
     string SearchQuery { get; set; } = "";
     CourseData SelectedCourse { get; set; }
     SectionData DisplayedSection { get; set; }
 
     List<ScheduledSection> ScheduledSections = new();
-    int VariableCredits { get; set; } = 3; // Default variable credit value
-
+    int VariableCredits { get; set; } = 3;
+    
     // Class to hold scheduled sections with additional info
     class ScheduledSection
     {
@@ -433,15 +492,28 @@
         public TimeSpan StartTime { get; set; }
         public TimeSpan EndTime { get; set; }
         public List<string> Days { get; set; } = new List<string>();
+        public int ColorIndex { get; set; } // For distinguishing courses visually
     }
 
     int TotalCredits => ScheduledSections.Sum(s => s.Credits);
+    
+    IEnumerable<CourseData> FilteredCourses => 
+        string.IsNullOrWhiteSpace(SearchQuery)
+            ? new List<CourseData>() // Don't show any courses when search is empty
+            : AllLoadedCourses.Where(c => !string.IsNullOrWhiteSpace(c.CourseName) &&
+                                    (c.CourseName.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase) ||
+                                     (!string.IsNullOrWhiteSpace(c.Title) && 
+                                      c.Title.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase))))
+                            .Take(10); // Limit to 10 results
 
-    void ToggleSearch() => ShowSearchForm = !ShowSearchForm;
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        LoadCourses(); // Load courses on initial load
+    }
 
     void LoadCourses()
     {
-        CoursesToDisplay.Clear();
         AllLoadedCourses.Clear();
         
         // Get courses for the selected campus and term
@@ -454,17 +526,13 @@
             var globalCourses = DataService.GetCourses("Global", SelectedTerm);
             AllLoadedCourses.AddRange(globalCourses);
         }
-        
-        CoursesToDisplay = AllLoadedCourses;
     }
 
-    IEnumerable<CourseData> FilteredCourses =>
-        string.IsNullOrWhiteSpace(SearchQuery)
-            ? CoursesToDisplay.Take(100) // Limit to first 100 courses when no search to improve performance
-            : CoursesToDisplay.Where(c => !string.IsNullOrWhiteSpace(c.CourseName) &&
-                                         (c.CourseName.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase) ||
-                                          (!string.IsNullOrWhiteSpace(c.Title) && 
-                                           c.Title.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase))));
+    void FilterCourses()
+    {
+        // This is handled by the filtered property automatically
+        StateHasChanged();
+    }
 
     void SelectCourse(CourseData course)
     {
@@ -475,13 +543,14 @@
     void ShowSectionDetail(SectionData sec)
     {
         DisplayedSection = sec;
-        // Set a sensible default for variable credits based on course details
+        
+        // Set default credits based on course details
         if (sec.Credits == "V")
         {
             var details = GetCourseDescriptionDetails(sec);
             if (details != null && !string.IsNullOrEmpty(details.CourseCredit))
             {
-                // Try to parse credit range from description
+                // Parse credit range from description
                 var creditText = details.CourseCredit;
                 if (creditText.Contains("1-"))
                 {
@@ -543,36 +612,66 @@
         {
             Section = sec,
             Course = SelectedCourse,
-            Credits = courseCredits
+            Credits = courseCredits,
+            ColorIndex = ScheduledSections.Count % 6 + 1 // Cycle through 6 colors
         };
         
         // Parse meeting times
         ParseScheduleTimes(scheduledSection);
         
         ScheduledSections.Add(scheduledSection);
+        DisplayedSection = null; // Close modal
+        
         await JSRuntime.InvokeVoidAsync("alert", "Section added to schedule!");
     }
 
-    void ParseScheduleTimes(ScheduledSection scheduled)
-{
-    // Initialize the Days list as strings instead of chars
-    scheduled.Days = new List<string>();
-    
-    // First try to get accurate times from CourseDescriptionDetails
-    var details = GetCourseDescriptionDetails(scheduled.Section);
-    if (details != null && details.Meetings.Any())
+    void RemoveSection(ScheduledSection section)
     {
-        var meeting = details.Meetings.First(); // Using first meeting for simplicity
-        
-        if (!string.IsNullOrEmpty(meeting.Days))
-        {
-            // Parse the days string and add each day
-            ParseDaysString(meeting.Days, scheduled.Days);
-        }
+        ScheduledSections.Remove(section);
+    }
 
-        if (!string.IsNullOrEmpty(meeting.Time))
+    void ParseScheduleTimes(ScheduledSection scheduled)
+    {
+        // Initialize the Days list
+        scheduled.Days = new List<string>();
+        
+        // First try to get accurate times from CourseDescriptionDetails
+        var details = GetCourseDescriptionDetails(scheduled.Section);
+        if (details != null && details.Meetings.Any())
         {
-            var timeParts = meeting.Time.Split('-');
+            var meeting = details.Meetings.First(); // Using first meeting for simplicity
+            
+            if (!string.IsNullOrEmpty(meeting.Days))
+            {
+                // Parse the days string and add each day
+                ParseDaysString(meeting.Days, scheduled.Days);
+            }
+
+            if (!string.IsNullOrEmpty(meeting.Time))
+            {
+                var timeParts = meeting.Time.Split('-');
+                if (timeParts.Length == 2)
+                {
+                    ParseTimeString(timeParts[0].Trim(), out TimeSpan startTime);
+                    ParseTimeString(timeParts[1].Trim(), out TimeSpan endTime);
+                    
+                    scheduled.StartTime = startTime;
+                    scheduled.EndTime = endTime;
+                    return;
+                }
+            }
+        }
+        
+        // Fallback to main section data
+        if (!string.IsNullOrEmpty(scheduled.Section.Days))
+        {
+            // Parse the days and add them to the scheduled section
+            ParseDaysString(scheduled.Section.Days, scheduled.Days);
+        }
+        
+        if (!string.IsNullOrEmpty(scheduled.Section.Time))
+        {
+            var timeParts = scheduled.Section.Time.Split('-');
             if (timeParts.Length == 2)
             {
                 ParseTimeString(timeParts[0].Trim(), out TimeSpan startTime);
@@ -580,87 +679,80 @@
                 
                 scheduled.StartTime = startTime;
                 scheduled.EndTime = endTime;
-                return;
             }
         }
     }
-    
-    // Fallback to main section data
-    if (!string.IsNullOrEmpty(scheduled.Section.Days))
-    {
-        // Parse the days and add them to the scheduled section
-        ParseDaysString(scheduled.Section.Days, scheduled.Days);
-    }
-    
-    if (!string.IsNullOrEmpty(scheduled.Section.Time))
-    {
-        var timeParts = scheduled.Section.Time.Split('-');
-        if (timeParts.Length == 2)
-        {
-            ParseTimeString(timeParts[0].Trim(), out TimeSpan startTime);
-            ParseTimeString(timeParts[1].Trim(), out TimeSpan endTime);
-            
-            scheduled.StartTime = startTime;
-            scheduled.EndTime = endTime;
-        }
-    }
-}
 
-// Helper method to parse day codes
-private void ParseDaysString(string daysString, List<string> daysList)
-{
-    if (string.IsNullOrEmpty(daysString))
-        return;
-        
-    // Handle "ARRG" or similar
-    if (daysString.Contains("ARRG") || daysString.Contains("TBA"))
+    // Helper method to parse day codes
+    private void ParseDaysString(string daysString, List<string> daysList)
     {
-        return; // No specific days for arranged sections
-    }
-    
-    // Split by commas if present
-    var dayParts = daysString.Split(',');
-    
-    foreach (var part in dayParts)
-    {
-        string day = part.Trim();
+        if (string.IsNullOrEmpty(daysString))
+            return;
+            
+        // Handle "ARRG" or similar
+        if (daysString.Contains("ARRG") || daysString.Contains("TBA") || daysString.Contains("ARRGT"))
+        {
+            return; // No specific days for arranged sections
+        }
         
-        // Handle multi-character day codes
-        if (day == "TH")
+        // Split by commas if present
+        var dayParts = daysString.Split(',');
+        
+        foreach (var part in dayParts)
         {
-            daysList.Add("TH");
-        }
-        else if (day=="TU")
-        {
-             daysList.Add("TU");
-        }
-        else if (day.Length > 1)
-        {
-            // For other multi-character codes, add each character as a separate day
-            foreach (char c in day)
+            string day = part.Trim();
+            
+            // Handle multi-character day codes
+            if (day == "TH")
             {
+                daysList.Add("TH");
+            }
+            else if (day == "TU")
+            {
+                daysList.Add("TU");
+            }
+            else if (day.Length > 1)
+            {
+                // For other multi-character codes, add each character as a separate day
+                foreach (char c in day)
+                {
+                    if ("MWFS".Contains(c))
+                    {
+                        daysList.Add(c.ToString());
+                    }
+                    else if (c == 'T')
+                    {
+                        // Add TU for Tuesday
+                        daysList.Add("TU");
+                    }
+                    else if (c == 'R')
+                    {
+                        // 'R' is sometimes used for Thursday
+                        daysList.Add("TH");
+                    }
+                }
+            }
+            else if (day.Length == 1)
+            {
+                // Single character day code
+                char c = day[0];
                 if ("MWFS".Contains(c))
                 {
                     daysList.Add(c.ToString());
                 }
-            }
-        }
-        else if (day.Length == 1)
-        {
-            // Single character day code
-            char c = day[0];
-            if ("MTWFS".Contains(c))
-            {
-                daysList.Add(c.ToString());
-            }
-            else if (c == 'R')
-            {
-                // 'R' is sometimes used for Thursday
-                daysList.Add("TH");
+                else if (c == 'T')
+                {
+                    // 'T' is usually Tuesday
+                    daysList.Add("TU");
+                }
+                else if (c == 'R')
+                {
+                    // 'R' is sometimes used for Thursday
+                    daysList.Add("TH");
+                }
             }
         }
     }
-}
 
     bool ParseTimeString(string timeStr, out TimeSpan result)
     {
@@ -713,9 +805,46 @@ private void ParseDaysString(string daysString, List<string> daysList)
     {
         if (string.IsNullOrWhiteSpace(sec.Days) || string.IsNullOrWhiteSpace(sec.Time))
         {
-            return "ARRGT";
+            return "ARRANGED";
         }
         return $"{sec.Days} {sec.Time}";
+    }
+
+string FormatDaysTime(ScheduledSection scheduled)
+{
+    if (scheduled.Days.Count == 0)
+    {
+        return "ARRANGED";
+    }
+    
+    string daysText = string.Join(", ", scheduled.Days);
+    
+    // Check if TimeSpan values are valid before formatting
+    string timeText = "";
+    try {
+        timeText = $"{FormatTimeSpan(scheduled.StartTime)} - {FormatTimeSpan(scheduled.EndTime)}";
+    }
+    catch {
+        timeText = "Time not specified";
+    }
+    
+    return $"{daysText} {timeText}";
+}
+
+
+private string FormatTimeSpan(TimeSpan ts)
+{
+    try {
+        return DateTime.Today.Add(ts).ToString("h:mm tt");
+    }
+    catch {
+        return "??:??";
+    }
+}
+
+    string FormatHour(int hour)
+    {
+        return new DateTime(2000, 1, 1, hour, 0, 0).ToString("h:mm tt");
     }
 
     string GetStatusClass(string status)
@@ -729,11 +858,42 @@ private void ParseDaysString(string daysString, List<string> daysList)
         };
     }
 
+    string GetCourseColorClass(ScheduledSection scheduled)
+    {
+        return $"course-color-{scheduled.ColorIndex}";
+    }
+
+    int GetDayIndex(string day)
+    {
+        return day switch
+        {
+            "M" => 0,    // Monday
+            "TU" => 1,   // Tuesday
+            "W" => 2,    // Wednesday
+            "TH" => 3,   // Thursday
+            "F" => 4,    // Friday
+            _ => -1      // Unknown
+        };
+    }
+
+    string GetCoursePositionStyle(ScheduledSection scheduled, int dayIndex)
+    {
+        // Calculate position and height based on time
+        double startHour = scheduled.StartTime.TotalHours;
+        double endHour = scheduled.EndTime.TotalHours;
+        
+        // For positioning, we need to consider the starting hour of our grid (7am)
+        double startOffset = (startHour - 7) * 60; // Convert to minutes
+        double height = (endHour - startHour) * 60; // Height in minutes
+        
+        return $"top: {startOffset}px; height: {height}px;";
+    }
+
     bool IsScheduleConflict(SectionData section)
 {
     if (string.IsNullOrWhiteSpace(section.Days) || string.IsNullOrWhiteSpace(section.Time))
     {
-        return false; // ARRGT sections don't conflict
+        return false; // ARRANGED sections don't conflict
     }
 
     // Create a temporary scheduled section for comparison
@@ -743,15 +903,17 @@ private void ParseDaysString(string daysString, List<string> daysList)
         Course = SelectedCourse
     };
     
+    // Parse the section's schedule times
     ParseScheduleTimes(tempSection);
     
+    // Check for conflicts with existing scheduled sections
     foreach (var scheduled in ScheduledSections)
     {
         // Skip if no days or times (arranged sections)
         if (scheduled.Days.Count == 0 || tempSection.Days.Count == 0)
             continue;
             
-        // Check for day overlap - convert to set of days
+        // Check for day overlap
         bool sharedDay = scheduled.Days.Intersect(tempSection.Days).Any();
         if (!sharedDay) 
             continue;
@@ -764,231 +926,28 @@ private void ParseDaysString(string daysString, List<string> daysList)
     
     return false;
 }
-
-    //
-    // ------------------- THE WEEKLY SCHEDULE RENDERING --------------------
-    //
-
-private RenderFragment RenderWeeklyCalendar() => builder =>
-{
-    // Days of the week with proper formatting
-    var days = new[] { "M", "TU", "W", "TH", "F" };
-    var dayNames = new[] { "Monday", "Tuesday", "Wednesday", "Thursday", "Friday" };
-    
-    // Hours range - use hourly slots for better readability
-    var startHour = 7;  // 7am
-    var endHour = 22;   // 10pm
-
-    int seq = 0;
-    builder.OpenElement(seq++, "div");
-    builder.AddAttribute(seq++, "class", "weekly-schedule-container");
-    
-    // Centered heading
-    builder.OpenElement(seq++, "h3");
-    builder.AddAttribute(seq++, "class", "text-center mb-3");
-    builder.AddContent(seq++, "Weekly Schedule");
-    builder.CloseElement(); // </h3>
-    
-    builder.OpenElement(seq++, "table");
-    builder.AddAttribute(seq++, "class", "weekly-calendar");
-
-    // Header row
-    builder.OpenElement(seq++, "thead");
-    builder.OpenElement(seq++, "tr");
-
-    // Time column header
-    builder.OpenElement(seq++, "th");
-    builder.AddAttribute(seq++, "style", "width: 80px;");
-    builder.AddContent(seq++, "Time");
-    builder.CloseElement(); // </th>
-
-    // Day column headers
-    for (int i = 0; i < days.Length; i++)
-    {
-        builder.OpenElement(seq++, "th");
-        builder.AddContent(seq++, dayNames[i]);
-        builder.CloseElement(); // </th>
-    }
-
-    builder.CloseElement(); // </tr>
-    builder.CloseElement(); // </thead>
-
-    // Table body
-    builder.OpenElement(seq++, "tbody");
-    
-    // Generate hourly time slots
-    for (int hour = startHour; hour < endHour; hour++)
-    {
-        for (int minute = 0; minute < 60; minute += 30)
+        
+        // Parse the section's schedule times
+        ParseScheduleTimes(tempSection);
+        
+        // Check for conflicts with existing scheduled sections
+        foreach (var scheduled in ScheduledSections)
         {
-            var currentTime = new TimeSpan(hour, minute, 0);
-            
-            builder.OpenElement(seq++, "tr");
-            
-            // Time cell
-            builder.OpenElement(seq++, "td");
-            builder.AddAttribute(seq++, "class", "time-cell");
-            builder.AddContent(seq++, FormatTimeLabel(hour, minute));
-            builder.CloseElement(); // </td>
-            
-            // One cell per day
-            for (int d = 0; d < days.Length; d++)
-            {
-                builder.OpenElement(seq++, "td");
+            // Skip if no days or times (arranged sections)
+            if (scheduled.Days.Count == 0 || tempSection.Days.Count == 0)
+                continue;
                 
-                // Find all sections for this day and time slot
-                var matchingSections = ScheduledSections.Where(s => 
-                    HasDay(s.Days, days[d]) && 
-                    s.StartTime <= currentTime && 
-                    s.EndTime > currentTime).ToList();
-                    
-                foreach (var scheduled in matchingSections)
-                {
-                    // Only render at the start time to avoid duplicates
-                    if (Math.Abs(scheduled.StartTime.TotalMinutes - currentTime.TotalMinutes) < 15)
-                    {
-                        // Calculate time slot span (how many 30-min rows)
-                        var duration = scheduled.EndTime - scheduled.StartTime;
-                        int rowSpan = (int)Math.Ceiling(duration.TotalMinutes / 30.0);
-                        
-                        // Find conflicts
-                        var conflicts = ScheduledSections
-                            .Where(s => s != scheduled && 
-                                        HasDay(s.Days, days[d]) &&
-                                        s.StartTime < scheduled.EndTime && 
-                                        s.EndTime > scheduled.StartTime)
-                            .Any();
-                            
-                        builder.OpenElement(seq++, "div");
-                        builder.AddAttribute(seq++, "class", $"calendar-event {(conflicts ? "conflict" : "")}");
-                        builder.AddAttribute(seq++, "style", $"height: {Math.Max(22, 22 * rowSpan)}px;");
-                        
-                        // Course info
-                        builder.OpenElement(seq++, "div");
-                        builder.AddAttribute(seq++, "class", "event-title");
-                        builder.AddContent(seq++, $"{scheduled.Course.CourseName} {scheduled.Section.SectionNumber}");
-                        builder.CloseElement(); // </div>
-                        
-                        builder.OpenElement(seq++, "div");
-                        builder.AddAttribute(seq++, "class", "event-time");
-                        builder.AddContent(seq++, $"{FormatTimeSpan(scheduled.StartTime)} - {FormatTimeSpan(scheduled.EndTime)}");
-                        builder.CloseElement(); // </div>
-                        
-                        // Get instructor from CourseDescriptionDetails if available
-                        string instructor = GetInstructorName(scheduled.Section);
-                        
-                        builder.OpenElement(seq++, "div");
-                        builder.AddAttribute(seq++, "class", "event-instructor");
-                        builder.AddContent(seq++, instructor);
-                        builder.CloseElement(); // </div>
-                        
-                        builder.OpenElement(seq++, "div");
-                        builder.AddAttribute(seq++, "class", "event-location");
-                        builder.AddContent(seq++, scheduled.Section.Location);
-                        builder.CloseElement(); // </div>
-                        
-                        builder.CloseElement(); // </div>
-                    }
-                }
+            // Check for day overlap
+            bool sharedDay = scheduled.Days.Intersect(tempSection.Days).Any();
+            if (!sharedDay) 
+                continue;
                 
-                builder.CloseElement(); // </td>
-            }
-            
-            builder.CloseElement(); // </tr>
+            // Check for time overlap
+            bool timeOverlap = !(scheduled.EndTime <= tempSection.StartTime || scheduled.StartTime >= tempSection.EndTime);
+            if (timeOverlap)
+                return true;
         }
-    }
-    
-    // Add Arranged Courses section at the bottom
-    var arrangedSections = ScheduledSections.Where(s => 
-        string.IsNullOrWhiteSpace(s.Section.Days) || 
-        s.Section.Days.Contains("ARRG") ||
-        s.Days.Count == 0).ToList();
         
-    if (arrangedSections.Any())
-    {
-        // Header for Arranged Courses
-        builder.OpenElement(seq++, "tr");
-        builder.AddAttribute(seq++, "class", "arranged-header");
-        
-        builder.OpenElement(seq++, "td");
-        builder.AddAttribute(seq++, "colspan", "6");
-        builder.AddAttribute(seq++, "class", "arranged-title");
-        builder.AddContent(seq++, "Arranged Courses (No Set Meeting Time)");
-        builder.CloseElement(); // </td>
-        
-        builder.CloseElement(); // </tr>
-        
-        // One row per arranged course
-        foreach (var scheduled in arrangedSections)
-        {
-            builder.OpenElement(seq++, "tr");
-            builder.AddAttribute(seq++, "class", "arranged-course");
-            
-            builder.OpenElement(seq++, "td");
-            builder.AddContent(seq++, "ARRG");
-            builder.CloseElement(); // </td>
-            
-            builder.OpenElement(seq++, "td");
-            builder.AddAttribute(seq++, "colspan", "5");
-            
-            builder.OpenElement(seq++, "div");
-            builder.AddAttribute(seq++, "class", "calendar-event arranged");
-            
-            builder.OpenElement(seq++, "div");
-            builder.AddAttribute(seq++, "class", "event-title");
-            builder.AddContent(seq++, $"{scheduled.Course.CourseName} {scheduled.Section.SectionNumber}");
-            builder.CloseElement(); // </div>
-            
-            builder.OpenElement(seq++, "div");
-            builder.AddContent(seq++, $"{scheduled.Course.Title} ({scheduled.Credits} cr)");
-            builder.CloseElement(); // </div>
-            
-            string instructor = GetInstructorName(scheduled.Section);
-            
-            builder.OpenElement(seq++, "div");
-            builder.AddContent(seq++, $"Instructor: {instructor}");
-            builder.CloseElement(); // </div>
-            
-            builder.CloseElement(); // </div>
-            
-            builder.CloseElement(); // </td>
-            
-            builder.CloseElement(); // </tr>
-        }
-    }
-    
-    builder.CloseElement(); // </tbody>
-    builder.CloseElement(); // </table>
-    builder.CloseElement(); // </div>
-};
-
-// Helper methods for schedule display
-private string FormatTimeLabel(int hour, int minute)
-{
-    return new DateTime(2000, 1, 1, hour, minute, 0).ToString("h:mm tt");
-}
-
-private bool HasDay(List<string> daysList, string day)
-{
-    if (daysList == null || !daysList.Any())
         return false;
-        
-    return daysList.Contains(day);
-}
-
-private string GetInstructorName(SectionData section)
-{
-    // First try to get from CourseDescriptionDetails
-    var details = GetCourseDescriptionDetails(section);
-    if (details != null  && details.Instructors.Any())
-    {
-        return string.Join(", ", details.Instructors);
     }
-    
-    // Fallback to section data
-    return section.Instructor ?? "TBA";
-}
-private string FormatTimeSpan(TimeSpan ts) =>
-    new DateTime(1,1,1).Add(ts).ToString("h:mm tt");
-
 }
