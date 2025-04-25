@@ -29,12 +29,6 @@ namespace BlazorApp1.Services
         {
             try
             {
-                _logger.LogInformation("Initial degree data load starting.");
-                // Run the initial thing when the app starts
-                await Task.Run(() => DegreeScrape.scrapeall(), stoppingToken);
-                updateCacheDegree();
-                _logger.LogInformation("Initial degree data load complete.");
-                await Task.Delay(1000, stoppingToken); // Delay to ensure degree data is loaded before course data
                 _logger.LogInformation("Initial course data load starting.");
                 await Task.Run(() => CourseScrape.Runall(), stoppingToken);
                 UpdateCache();
@@ -45,6 +39,12 @@ namespace BlazorApp1.Services
                 _courseService.ScrapedCourses = courses;
                 _logger.LogInformation($"Updated CourseService scraped courses count: {courses.Count}");
                 _logger.LogInformation("Initial course data load complete.");
+                _logger.LogInformation("Initial degree data load starting.");
+                // Run the initial thing when the app starts
+                await Task.Run(() => DegreeScrape.scrapeall(), stoppingToken);
+                updateCacheDegree();
+                _logger.LogInformation("Initial degree data load complete.");
+                await Task.Delay(1000, stoppingToken); // Delay to ensure degree data is loaded before course data
 
                 //  refresh data hourly
                 while (!stoppingToken.IsCancellationRequested)

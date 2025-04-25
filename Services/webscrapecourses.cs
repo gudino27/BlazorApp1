@@ -124,15 +124,14 @@ namespace BlazorApp1.Services
         {
             var watch = System.Diagnostics.Stopwatch.StartNew();
             var options = new ChromeOptions();
-	    var userDataDir = Path.Combine(Path.GetTempPath(), "chrome_profiles", Guid.NewGuid().ToString());
-	    Directory.CreateDirectory(userDataDir);
             options.AddArgument("--disable-usb");
             options.AddArgument("--disable-usb-discovery");
             options.AddArgument("--headless");
             options.AddArgument("--log-level=3");
             options.AddArgument("--disable-gpu");
             options.AddArgument("--disable-logging");
-	    options.AddArgument($"--user-data-dir={userDataDir}");
+	    options.AddArgument("--no-sandbox"); // Important for Docker environments
+	    options.AddArgument("--disable-dev-shm-usage");
             var service = ChromeDriverService.CreateDefaultService();
             service.SuppressInitialDiagnosticInformation = true;
             service.HideCommandPromptWindow = true;
@@ -160,7 +159,7 @@ namespace BlazorApp1.Services
 
                 for (int i = 1; i <= 6; i++)
                 {
-                    for (int j = 3; j <= 3; j++)
+                    for (int j = 1; j <= 3; j++)
                     {
                         Console.WriteLine($"{campuses[i]} {terms[j]}");
                         ClickEvent(campuses[i], terms[j], mainDriver);
@@ -204,17 +203,16 @@ namespace BlazorApp1.Services
             DateTime march5 = new DateTime(2025, 3, 5);
             DateTime june1 = new DateTime(2025, 6, 1);
 
-
-
             var watch = System.Diagnostics.Stopwatch.StartNew();
             var options = new ChromeOptions();
+	    options.AddArgument("--no-sandbox"); // Important for Docker environments
+	    options.AddArgument("--disable-dev-shm-usage");
             options.AddArgument("--disable-usb");
             options.AddArgument("--disable-usb-discovery");
             options.AddArgument("--headless");
             options.AddArgument("--log-level=3");
             options.AddArgument("--disable-gpu");
             options.AddArgument("--disable-logging");
-
             var service = ChromeDriverService.CreateDefaultService();
             service.SuppressInitialDiagnosticInformation = true;
             service.HideCommandPromptWindow = true;
@@ -322,21 +320,21 @@ namespace BlazorApp1.Services
                 throw new InvalidOperationException("The mainDriver is not initialized.");
             }
 
-            var wait = new WebDriverWait(mainDriver, TimeSpan.FromSeconds(20));
+            var wait = new WebDriverWait(mainDriver, TimeSpan.FromSeconds(40));
             string tableBodyXPath = "/html/body/div[1]/div[3]/div/div[2]/main/div[2]/div/div/div/table/tbody";
             string rowXPath = tableBodyXPath + "/tr";
 
             int rowCount = 0;
-            wait.Until(driver =>
-            {
-                var rows = driver.FindElements(By.XPath(rowXPath));
-                if (rows.Count > 0)
-                {
-                    rowCount = rows.Count;
-                    return true;
-                }
-                return false;
-            });
+              try
+    {
+        wait.Until(d => d.FindElements(By.XPath(rowXPath)).Count > 0);
+    }
+    catch (WebDriverTimeoutException)
+    {
+        Console.WriteLine($"Timeout waiting for course rows on {campus} {term} at {mainDriver.Url}");
+        return;
+    }
+        	rowCount = mainDriver.FindElements(By.XPath(rowXPath)).Count;
             // Console.WriteLine($"Found {rowCount} rows in the zebra table.");
 
             var expectedSubjects = new HashSet<string>();
@@ -374,16 +372,15 @@ namespace BlazorApp1.Services
             var tasks = partitions.Select(partition => Task.Run(() =>
             {
                 var courseOptions = new ChromeOptions();
-		string profileDir = Path.Combine(Path.GetTempPath(),
-    "chrome_profiles", Guid.NewGuid().ToString());
-Directory.CreateDirectory(profileDir);
+		courseOptions.AddArgument("--no-sandbox"); // Important for Docker environments
+		courseOptions.AddArgument("--disable-dev-shm-usage");
                 courseOptions.AddArgument("--disable-usb");
                 courseOptions.AddArgument("--disable-usb-discovery");
                 courseOptions.AddArgument("--headless");
                 courseOptions.AddArgument("--log-level=3");
                 courseOptions.AddArgument("--disable-gpu");
                 courseOptions.AddArgument("--disable-logging");
-		courseOptions.AddArgument($"--user-data-dir={profileDir}");
+
 
                 var courseService = ChromeDriverService.CreateDefaultService();
                 courseService.SuppressInitialDiagnosticInformation = true;
@@ -408,7 +405,18 @@ Directory.CreateDirectory(profileDir);
                         string subjectTitleText = subjectTitle.Text.Trim();
 
                         wait.Until(d => subjectElement.Displayed);
+			IJavaScriptExecutor js = (IJavaScriptExecutor)driver;
+                        js.ExecuteScript("arguments[0].scrollIntoView({block: 'center'});",subjectElement);
+                        wait.Until(d => subjectElement.Displayed);
+                        try
+                        {
                         subjectElement.Click();
+                        }
+                        catch
+                        {
+                        Console.WriteLine("button click fail trying java");
+                        js.ExecuteScript("arguments[0].click();",subjectElement);
+                        }
                         wait.Until(d => d.FindElements(By.XPath("//table/tbody/tr")).Count > 0);
                         var courseData = ProcessCourseData(driver, subjectText, subjectTitleText);
 
@@ -440,16 +448,15 @@ Directory.CreateDirectory(profileDir);
             {
                 Console.WriteLine($"Retrying missing subjects: {string.Join(", ", missingSubjects)}");
                 var courseOptions = new ChromeOptions();
-		string profileDir = Path.Combine(Path.GetTempPath(),
-    "chrome_profiles", Guid.NewGuid().ToString());
-Directory.CreateDirectory(profileDir);
+		courseOptions.AddArgument("--no-sandbox"); // Important for Docker environments
+		courseOptions.AddArgument("--disable-dev-shm-usage");
                 courseOptions.AddArgument("--disable-usb");
                 courseOptions.AddArgument("--disable-usb-discovery");
                 courseOptions.AddArgument("--headless");
                 courseOptions.AddArgument("--log-level=3");
                 courseOptions.AddArgument("--disable-gpu");
                 courseOptions.AddArgument("--disable-logging");
-		courseOptions.AddArgument($"--user-data-dir={profileDir}");
+
 
                 var courseService = ChromeDriverService.CreateDefaultService();
                 courseService.SuppressInitialDiagnosticInformation = true;
@@ -470,7 +477,18 @@ Directory.CreateDirectory(profileDir);
                         var subjectTitle = rowElement.FindElement(By.XPath("./td[3]"));
                         string subjectTitleText = subjectTitle.Text.Trim();
                         var subjectElement = rowElement.FindElement(By.XPath("./td[2]/a"));
+        		IJavaScriptExecutor js = (IJavaScriptExecutor)missingDriver;
+                        js.ExecuteScript("arguments[0].scrollIntoView({block: 'center'});",subjectElement);
+                        wait.Until(d => subjectElement.Displayed);
+                        try
+                        {
                         subjectElement.Click();
+                        }
+                        catch
+                        {
+                        Console.WriteLine("button click fail trying java");
+                        js.ExecuteScript("arguments[0].click();",subjectElement);
+                        }
                         wait.Until(d => d.FindElements(By.XPath("//table/tbody/tr")).Count > 0);
                         var courseData = ProcessCourseData(missingDriver, subject, subjectTitleText);
                         if (courseData.Count > 0)
@@ -661,14 +679,26 @@ Directory.CreateDirectory(profileDir);
                 foreach (string key in sectionMap.Keys.ToList())
                 {
                     try
-                    {
-                        var sectionNumberElement = driverInstance.FindElement(
-                            By.XPath($"//td[@class='sched_sln' and normalize-space(text())='{key}']"));
-                        var sectionRow = sectionNumberElement.FindElement(By.XPath("./ancestor::tr"));
-                        var button = sectionRow.FindElement(By.XPath(".//td[@class='sched_sec']/a"));
+    {
+        var sectionNumberElement = driverInstance.FindElement(
+            By.XPath($"//td[@class='sched_sln' and normalize-space(text())='{key}']"));
+        var sectionRow = sectionNumberElement.FindElement(By.XPath("./ancestor::tr"));
+        var button = sectionRow.FindElement(By.XPath(".//td[@class='sched_sec']/a"));
 
-                        button.Click();
-                        Thread.Sleep(5000);
+        // Use JavaScript to scroll to and click the button
+        IJavaScriptExecutor js = (IJavaScriptExecutor)driverInstance;
+        js.ExecuteScript("arguments[0].scrollIntoView({block: 'center'});", button);
+        Thread.Sleep(1000); // Wait for scrolling to complete
+        
+        try {
+            // Try clicking directly first
+            button.Click();
+        } catch {
+            // If that fails, use JavaScript to click
+            js.ExecuteScript("arguments[0].click();", button);
+        }
+        
+        Thread.Sleep(5000);
 
                         var extraDetailsObj = LoadCourseDescriptionDetails(driverInstance);
                         List<string> extraDetailsList = ConvertDetailsToStringList(extraDetailsObj);
@@ -770,6 +800,7 @@ Directory.CreateDirectory(profileDir);
                 }
                 var doc = new HtmlDocument();
                 doc.LoadHtml(detailsHtml);
+
 
                 var dtNodes = doc.DocumentNode.SelectNodes("//dt");
                 if (dtNodes != null)
@@ -931,6 +962,7 @@ public static List<string> ConvertDetailsToStringList(CourseDescriptionDetails d
             }
             return sb.ToString();
         }
-
+	
     }
 }
+

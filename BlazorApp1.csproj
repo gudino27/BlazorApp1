@@ -7,6 +7,7 @@
     <UserSecretsId>0c15759b-4fdc-4db4-83fc-f1bed8cad55e</UserSecretsId>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
     <DockerfileContext>.</DockerfileContext>
+    <WarningLevel>0</WarningLevel>
   </PropertyGroup>
 
   <ItemGroup>
