@@ -1,18 +1,20 @@
-﻿namespace BlazorApp1.Services
+namespace BlazorApp1.Services
 {
-    using OpenQA.Selenium;
-    using OpenQA.Selenium.Chrome;
-    using OpenQA.Selenium.Support.UI;
+    using Microsoft.Playwright;
     using System;
     using System.Collections.Concurrent;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Linq;
     using System.Text;
-    using System.Threading;
+    using System.Text.RegularExpressions;
     using System.Threading.Tasks;
     using HtmlAgilityPack;
+    using Microsoft.AspNetCore.Routing;
+    using PuppeteerSharp.Input;
+    using DocumentFormat.OpenXml.Drawing.Diagrams;
 
-
+    //run this: powershell -ExecutionPolicy Bypass -File bin/Debug/net8.0/playwright.ps1 install
     public class Campus
     {
         public int Id { get; set; }
@@ -45,11 +47,8 @@
         public string? Time { get; set; }
         public string? Location { get; set; }
         public string? Instructor { get; set; }
-        public string? StartDate { get; set; }
-        public string? EndDate { get; set; }
         public List<string> CourseDetails { get; set; } = new List<string>();
         public List<CourseDescriptionDetails> CourseDescriptionDetails { get; set; } = new List<CourseDescriptionDetails>();
-
     }
     public class CourseDescriptionDetails
     {
@@ -66,7 +65,7 @@
         public string GERCode { get; set; } = string.Empty;
         public string WritingInTheMajor { get; set; } = string.Empty;
         public string Cooperative { get; set; } = string.Empty;
-        public List<string> MeetingsInfo { get; set; } = new List<string>();
+        public List<MeetingsInfo> Meetings { get; set; } = new List<MeetingsInfo>();
         public List<string> Instructors { get; set; } = new List<string>();
         public string InstructionMode { get; set; } = string.Empty;
         public string EnrollmentLimit { get; set; } = string.Empty;
@@ -76,6 +75,16 @@
         public string EndDate { get; set; } = string.Empty;
         public string Footnotes { get; set; } = string.Empty;
 
+    }
+    public class MeetingsInfo
+    {
+        public string Days { get; set; } = string.Empty;
+        public string Time { get; set; } = string.Empty;
+        public string Location { get; set; } = string.Empty;
+        public override string ToString()
+        {
+            return $"{Days} {Time} {Location}";
+        }
     }
     public class CampusData
     {
@@ -109,66 +118,1053 @@
     };
     }
 
-    partial class Sprint4
+    partial class CourseScrape
     {
-        static ChromeDriver? mainDriver;
+
         public static List<Campus> CampusesList { get; set; } = new List<Campus>();
+        private static IPlaywright? _playwright;
+        private static IBrowser? _browser;
 
-        public static void Runall()
+        
+
+        public static async Task Runall()
         {
-            var watch = System.Diagnostics.Stopwatch.StartNew();
-            var options = new ChromeOptions();
-            options.AddArgument("--disable-usb");
-            options.AddArgument("--disable-usb-discovery");
-            options.AddArgument("--headless");
-            options.AddArgument("--log-level=3");
-            options.AddArgument("--disable-gpu");
-            options.AddArgument("--disable-logging");
+            var Watch = Stopwatch.StartNew();
 
-            var service = ChromeDriverService.CreateDefaultService();
-            service.SuppressInitialDiagnosticInformation = true;
-            service.HideCommandPromptWindow = true;
-            service.EnableVerboseLogging = false;
-            var campuses = new Dictionary<int, string>
-    {
-        { 1, "Everett" },
-        { 2, "Global" },
-        { 3, "Pullman" },
-        { 4, "Spokane" },
-        { 5, "Tri-Cities" },
-        { 6, "Vancouver" }
-    };
-
-            var terms = new Dictionary<int, string>
-    {
-        { 1, "Fall 2025" },
-        { 2, "Spring 2025" },
-        { 3, "Summer 2025" }
-    };
-
-            using (mainDriver = new ChromeDriver(service, options))
+            try
             {
-                mainDriver.Navigate().GoToUrl("https://schedules.wsu.edu");
+                // Initialize Playwright
+                _playwright = await Playwright.CreateAsync();
 
-                for (int i = 1; i <= 1; i++)
+                // Launch browser - uses Chromium by default
+                _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
                 {
-                    for (int j = 1; j <= 1; j++)
+                    Headless = true,
+                    Args = new[]
                     {
-                        Console.WriteLine($"{campuses[i]} {terms[j]}");
-                        ClickEvent(campuses[i], terms[j], mainDriver);
-                        Thread.Sleep(5000);
-                        CourseLoadParallel(campuses[i], terms[j]);
-                        mainDriver.Navigate().Back();
+                "--disable-gpu",
+                "--disable-dev-shm-usage",
+                "--disable-setuid-sandbox",
+                "--no-sandbox"
+                    }
+                });
+
+                var campuses = new Dictionary<int, string>
+                {
+                    { 1, "Everett" },
+                    { 2, "Global" },
+                    { 3, "Pullman" },
+                    { 4, "Spokane" },
+                    { 5, "Tri-Cities" },
+                    { 6, "Vancouver" }
+                };
+
+                var terms = new Dictionary<int, string>
+        {
+            { 1, "Fall 2025" },
+           { 2, "Spring 2025" },
+           { 3, "Summer 2025" }
+        };
+
+
+                // Process each campus and term
+                foreach (var (campusId, campusName) in campuses)
+                {
+                    foreach (var (termId, termName) in terms)
+                    {
+                        var watch = Stopwatch.StartNew();
+                        Console.WriteLine($"Processing {campusName} {termName}");
+                        await ProcessCampusAndTerm(campusName, termName);
+                        watch.Stop();
+                        var elapsedMinutes = watch.ElapsedMilliseconds / 60000;
+                        var remainderElapsedSeconds = (watch.ElapsedMilliseconds % 60000) / 1000;
+                        Console.WriteLine($"Time elapsed for the term: {elapsedMinutes} minutes and {remainderElapsedSeconds} seconds");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error in RunAll: {ex.Message}");
+                Console.WriteLine(ex.StackTrace);
+            }
+            finally
+            {
+                // Cleanup
+                if (_browser != null)
+                {
+                    await _browser.DisposeAsync();
+                }
+
+                _playwright?.Dispose();
+                Watch.Stop();
+                var elapsedMinutes = Watch.ElapsedMilliseconds / 60000;
+                var remainderElapsedSeconds = (Watch.ElapsedMilliseconds % 60000) / 1000;
+                Console.WriteLine($"Total time elapsed: {elapsedMinutes} minutes and {remainderElapsedSeconds} seconds");
+
+
+            }
+        }
+
+        public static async Task DateLoad()
+        {
+            var watch = Stopwatch.StartNew();
+            try
+            {
+                // Initialize Playwright
+                _playwright = await Playwright.CreateAsync();
+
+                // Launch browser - uses Chromium by default
+                _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
+                {
+                    Headless = true,
+                    Args = new[]
+                    {
+                "--disable-gpu",
+                "--disable-dev-shm-usage",
+                "--disable-setuid-sandbox",
+                "--no-sandbox"
+                    }
+                });
+
+                var campuses = new Dictionary<int, string>
+                {
+                    { 1, "Everett" },
+                    { 2, "Global" },
+                    { 3, "Pullman" },
+                    { 4, "Spokane" },
+                    { 5, "Tri-Cities" },
+                    { 6, "Vancouver" }
+                };
+
+                var terms = new Dictionary<int, string>
+        {
+            { 1, "Fall 2025" },
+            { 2, "Spring 2025" },
+            { 3, "Summer 2025" }
+        };
+                //get the current date
+                DateTime currentDate = DateTime.Now;
+                //get the current month
+                int currentMonth = currentDate.Month;
+                //get the current day
+                int currentDay = currentDate.Day;
+                //if the date is between august 25th and januaray 12th refresh the spring courses
+                // if the date is between january 13th and march 20th refresh the summer courses
+                // if the date is between march 21st and august 24th refresh the fall courses
+                int august = 8;
+                int january = 1;
+                int march = 3;
+                // Check which term to refresh based on current date
+                if ((currentMonth == august && currentDay >= 25) ||
+                    (currentMonth > august) ||
+                    (currentMonth == january && currentDay <= 12))
+                {
+                    // Between August 25 and January 12 - refresh Spring courses
+                    Console.WriteLine("Refreshing Spring courses");
+                    foreach (var (campusId, campusName) in campuses)
+                    {
+                        await ProcessCampusAndTerm(campusName, "Spring 2025");
+                    }
+                }
+                else if ((currentMonth == january && currentDay > 12) ||
+                         (currentMonth > january && currentMonth < march) ||
+                         (currentMonth == march && currentDay <= 20))
+                {
+                    // Between January 13 and March 20 - refresh Summer courses
+                    Console.WriteLine("Refreshing Summer courses");
+                    foreach (var (campusId, campusName) in campuses)
+                    {
+                        await ProcessCampusAndTerm(campusName, "Summer 2025");
+                    }
+                }
+                else
+                {
+                    // Between March 21 and August 24 - refresh Fall courses
+                    Console.WriteLine("Refreshing Fall courses");
+                    foreach (var (campusId, campusName) in campuses)
+                    {
+                        await ProcessCampusAndTerm(campusName, "Fall 2025");
+                    }
+                }
+
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(
+                    $"Error in CourseRefresh: {ex.Message}");
+
+            }
+            finally
+            {
+                if (_browser != null)
+                {
+                    await _browser.DisposeAsync();
+                }
+
+                _playwright?.Dispose();
+
+                watch.Stop();
+                var elapsedMinutes = watch.ElapsedMilliseconds / 60000;
+                var remainderElapsedSeconds = (watch.ElapsedMilliseconds % 60000) / 1000;
+                Console.WriteLine($"Time elapsed: {elapsedMinutes} minutes and {remainderElapsedSeconds} seconds");
+
+            }
+        }
+        private static async Task ProcessCampusAndTerm(string campusName, string termName)
+        {
+            // Create initial context and page for getting subject list
+
+            if (_playwright == null || _browser == null)
+            {
+                throw new InvalidOperationException("Playwright or browser is not initialized.");
+            }
+            await using var mainContext = await _browser.NewContextAsync(new BrowserNewContextOptions
+            {
+                ViewportSize = new ViewportSize { Width = 1920, Height = 1080 },
+                JavaScriptEnabled = true
+            });
+
+            var mainPage = await mainContext.NewPageAsync();
+
+            try
+            {
+                // Navigate to main page and select campus/term
+                var subjectData = await GetSubjectList(mainPage, campusName, termName);
+
+                if (subjectData.Count == 0)
+                {
+                    Console.WriteLine($"No subjects found for {campusName} {termName}");
+                    return;
+                }
+
+                Console.WriteLine($"Found {subjectData.Count} subjects for {campusName} {termName}");
+
+                // Track subjects that we successfully process
+                var processedSubjects = new List<string>();
+
+                // Process in batches with parallelization
+                int maxParallel = Math.Min(20, subjectData.Count); // Limit parallelism
+                var batches = SplitIntoBatches(subjectData, maxParallel);
+		int batchindexcount=0;
+                var results = new ConcurrentDictionary<string, List<CourseData>>();
+
+                await Parallel.ForEachAsync(batches, new ParallelOptions { MaxDegreeOfParallelism = maxParallel },
+                    async (batch, token) =>
+                    {
+                        // Track batch progress
+                        int batchIndex = batches.IndexOf(batch);
+                        Console.WriteLine($"Starting batch {batchIndex + 1} with {batch.Count} subjects");
+
+                        foreach (var subject in batch)
+                        {
+                            try
+                            {
+                                // IMPORTANT: Always start from the main page for each subject
+                                await using var subjectContext = await _browser.NewContextAsync();
+                                var subjectPage = await subjectContext.NewPageAsync();
+
+                                // Navigate to main page and select campus/term
+                                await NavigateToCampusAndTerm(subjectPage, campusName, termName);
+
+                                // Find and click the subject
+                                var success = await ClickSubject(subjectPage, subject.Name.Trim());
+
+                                if (!success)
+                                {
+                                    Console.WriteLine($"Failed to click subject: {subject.Name}");
+                                    continue;
+                                }
+
+                                // Wait for course data to load
+                                await subjectPage.WaitForLoadStateAsync(LoadState.NetworkIdle);
+                                await Task.Delay(3000);
+
+                                // Process course data
+                                var courseData = await ProcessCourseData(subjectPage, subject.Name.Trim(), subject.Title.Trim());
+
+                                if (courseData.Count > 0)
+                                {
+                                    results.AddOrUpdate(subject.Name.Trim(), courseData, (key, existing) =>
+                                    {
+                                        existing.AddRange(courseData);
+                                        return existing;
+                                    });
+
+                                    lock (processedSubjects)
+                                    {
+                                        processedSubjects.Add(subject.Name.Trim());
+                                    }
+                                    //Console.WriteLine($"Processed subject: {subject.Name} with {courseData.Count} courses");
+                                    
+                                }
+                                else
+                                {
+                                    Console.WriteLine($"No courses found for subject: {subject.Name}");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine($"Error processing subject {subject.Name}: {ex.Message}");
+                            }
+                        }
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine($"Completed batch {batchIndex + 1}");
+                        batchindexcount++;
+                        Console.WriteLine($" percentage complete: {((double)(batchindexcount) / batches.Count) * 100}%");
+                        Console.ResetColor();
+                    });
+
+                // Log missing subjects
+                var missingSubjects = subjectData.Select(s => s.Name.Trim())
+                                               .Except(processedSubjects)
+                                               .ToList();
+
+                if (missingSubjects.Count > 0)
+                {
+                    Console.WriteLine($"Missing subjects: {string.Join(", ", missingSubjects)}");
+                    foreach (var subject in missingSubjects)
+                    {
+                        try
+                        {
+                            Console.WriteLine(
+                            $"Reprocessing subject {subject} for {campusName} {termName}");
+                            await using var subjectContext = await _browser.NewContextAsync();
+                            var subjectPage = await subjectContext.NewPageAsync();
+                            await NavigateToCampusAndTerm(subjectPage, campusName, termName);
+                            var success = await ClickSubject(subjectPage, subject.Trim());
+                            if (!success)
+                            {
+                                Console.WriteLine($"Failed to click subject: {subject}");
+                                continue;
+                            }
+                            await subjectPage.WaitForLoadStateAsync(LoadState.NetworkIdle);
+                            await Task.Delay(3000);
+                            var courseData = await ProcessCourseData(subjectPage, subject.Trim(), subject.Trim());
+                            if (courseData.Count > 0)
+                            {
+                                results.AddOrUpdate(subject.Trim(), courseData, (key, existing) =>
+                                {
+                                    existing.AddRange(courseData);
+                                    return existing;
+                                });
+                                processedSubjects.Add(subject.Trim());
+                                Console.WriteLine($"Reprocessed subject: {subject} with {courseData.Count} courses");
+                            }
+                            else
+                            {
+                                Console.WriteLine($"No courses found for subject: {subject}");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Error reprocessing subject {subject}: {ex.Message}");
+
+                        }
                     }
 
                 }
 
+                // Save all results
+                var allScrapedCourses = results.Values.SelectMany(courses => courses).ToList();
+                AddCourseData(campusName, termName, termName, allScrapedCourses);
+
+                //Console.WriteLine($"Completed processing {campusName} {termName} with {allScrapedCourses.Count} courses from {results.Count} subjects");
+                //Console.WriteLine("\n========== DETAILED COURSE INFORMATION ==========\n");
+
+                foreach (var kvp in results.OrderBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                   // Console.WriteLine($"\n===========================================================  Subject: {kvp.Key}  ===========================================================");
+
+                    foreach (var course in kvp.Value.OrderBy(c => c.CourseName))
+                    {
+                       // Console.WriteLine($"{course.CourseName}");
+
+                        foreach (var section in course.Sections.OrderBy(s => s.SectionNumber))
+                        {
+                            foreach (var detail in section.CourseDescriptionDetails)
+                            {
+                                int maxWidth = 80;
+                                string wrappedDescription = WrapText(detail.CourseDescription, maxWidth);
+                               // Console.WriteLine($"        *Course Description: {detail.CourseDescription}, Course PreRecs: {detail.CoursePrerequisite}, Credits: {detail.CourseCredit}");
+                               // Console.WriteLine($"        *Special Fee: {detail.SpecialCourseFee}, Consent: {detail.ConsentRequired}, Crosslisted: {detail.CrosslistedCourses}, Conjoint: {detail.ConjointCourses}");
+                                //Console.WriteLine($"        *UCORE: {detail.UCORE}, , GER: {detail.GERCode}, Writing: {detail.WritingInTheMajor}");
+                                //Console.WriteLine($"        *Cooperative: {detail.Cooperative}, Instr. Mode: {detail.InstructionMode}");
+                               // Console.WriteLine($"        *Comment: {detail.Comment}, Footnotes: {detail.Footnotes}");
+                                foreach( var instructor in detail.Instructors)
+                                {
+                                   // Console.WriteLine($"        *Instructor: {instructor}");
+                                }
+                                foreach (var m in detail.Meetings)
+                                {
+                                    //Console.WriteLine($"    Days: {m.Days}, Time: {m.Time},Location: {m.Location}");
+                                }
+                            }
+                        }
+                    }
+                }
+
+                //Console.WriteLine("\n========== END DETAILED COURSE INFORMATION ==========\n");
+
             }
-            watch.Stop();
-            var elapsedminutes = watch.ElapsedMilliseconds / 60000;
-            var reminderelapsedseconds = (watch.ElapsedMilliseconds % 60000) / 1000;
-            Console.WriteLine($"Time elapsed: {elapsedminutes} minutes and {reminderelapsedseconds} seconds");         
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error processing {campusName} {termName}: {ex.Message}");
+            }
         }
+
+        private static List<List<(string Name, string Title)>> SplitIntoBatches(List<(string Name, string Title)> subjects, int batchCount)
+        {
+            var batches = new List<List<(string Name, string Title)>>();
+            int batchSize = (int)Math.Ceiling((double)subjects.Count / batchCount);
+
+            for (int i = 0; i < batchCount; i++)
+            {
+                int startIndex = i * batchSize;
+                int count = Math.Min(batchSize, subjects.Count - startIndex);
+
+                if (count <= 0) break;
+
+                batches.Add(subjects.GetRange(startIndex, count));
+            }
+
+            return batches;
+        }
+
+        private static async Task<List<(string Name, string Title)>> GetSubjectList(IPage page, string campusName, string termName)
+        {
+            var subjects = new List<(string Name, string Title)>();
+
+            try
+            {
+                // Navigate to campus and term
+                await NavigateToCampusAndTerm(page, campusName, termName);
+
+                // Extract subject list
+                var subjectLinks = await page.QuerySelectorAllAsync("td.zebratablesubject a");
+                if (subjectLinks.Count == 0)
+                {
+                    // Try alternative selector
+                    subjectLinks = await page.QuerySelectorAllAsync("tr.zebratable a");
+                }
+
+                foreach (var link in subjectLinks)
+                {
+                    var subjectName = await link.TextContentAsync();
+
+                    // Find the title cell
+                    var row = await link.EvaluateHandleAsync("el => el.closest('tr')");
+                    var titleCell = await row.AsElement().QuerySelectorAsync("td.zebratabletitle");
+                    var titleText = "";
+
+                    if (titleCell != null)
+                    {
+                        titleText = await titleCell.TextContentAsync();
+                    }
+
+                    subjects.Add((subjectName.Trim(), titleText.Trim()));
+                }
+
+                Console.WriteLine($"Found {subjects.Count} subjects for {campusName} {termName}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error getting subject list for {campusName} {termName}: {ex.Message}");
+            }
+
+            return subjects;
+        }
+
+        private static async Task NavigateToCampusAndTerm(IPage page, string campusName, string termName)
+        {
+            // Start at the main schedules page
+           // Console.WriteLine($"Navigating to main schedules page for {campusName} {termName}...");
+            await page.GotoAsync("https://schedules.wsu.edu", new PageGotoOptions
+            {
+                WaitUntil = WaitUntilState.NetworkIdle,
+                Timeout = 60000
+            });
+
+            // Wait for page to fully load
+            await page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
+            await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+            await Task.Delay(3000);
+
+            // Look for and click the campus/term link
+            var success = await page.EvaluateAsync<bool>($@"
+        () => {{
+            const headers = Array.from(document.querySelectorAll('.header_wrapper'));
+            for (const header of headers) {{
+                const cityElement = header.querySelector('.City');
+                if (cityElement && cityElement.textContent.trim() === '{campusName}') {{
+                    // Found the campus, now find the term link
+                    const termLinks = Array.from(header.querySelectorAll('.nav-item'));
+                    for (const link of termLinks) {{
+                        if (link.textContent.includes('{termName}')) {{
+                            const anchor = link.querySelector('a');
+                            if (anchor) {{
+                                // Scroll into view and click
+                                anchor.scrollIntoView({{block: 'center'}});
+                                setTimeout(() => {{ anchor.click(); }}, 500);
+                                return true;
+                            }}
+                        }}
+                    }}
+                }}
+            }}
+            return false;
+        }}
+    ");
+
+            if (!success)
+            {
+                throw new Exception($"Failed to navigate to {campusName} {termName}");
+            }
+
+            // Wait for navigation
+            await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+            await Task.Delay(5000); // Give extra time for the page to stabilize
+
+            //Console.WriteLine($"Successfully navigated to {campusName} {termName}");
+        }
+
+        private static async Task<bool> ClickSubject(IPage page, string subjectName)
+        {
+            try
+            {
+                var success = await page.EvaluateAsync<bool>($@"
+            () => {{
+                const links = Array.from(document.querySelectorAll('td.zebratablesubject a, tr.zebratable a'));
+                for (const link of links) {{
+                    if (link.textContent.trim() === '{subjectName}') {{
+                        link.scrollIntoView({{block: 'center'}});
+                        setTimeout(() => {{ link.click(); }}, 500);
+                        return true;
+                    }}
+                }}
+                return false;
+            }}
+        ");
+
+                if (success)
+                {
+                    // Wait for navigation and content to load
+                    await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+                    await Task.Delay(3000);
+                    return true;
+                }
+
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error clicking subject {subjectName}: {ex.Message}");
+                return false;
+            }
+        }
+
+        private static async Task<List<CourseData>> ProcessCourseData(IPage page, string degree, string title)
+        {
+            List<CourseData> courses = new List<CourseData>();
+            Dictionary<string, SectionData> sectionMap = new Dictionary<string, SectionData>();
+
+            try
+            {
+                // Check if rows exist
+                var rowsExist = await page.QuerySelectorAsync("table tbody tr") != null;
+                if (!rowsExist)
+                {
+                    Console.WriteLine($"No course rows found for {degree}");
+                    return courses;
+                }
+
+                // Get all rows
+                var allRows = await page.QuerySelectorAllAsync("table tbody tr");
+                //Console.WriteLine($"Found {allRows.Count} rows for {degree}");
+
+                CourseData? currentCourse = null;
+
+                // First pass: Process basic section information
+                foreach (var row in allRows)
+                {
+                    try
+                    {
+                        // Check if this is a section divider or course header
+                        var rowClass = await row.GetAttributeAsync("class") ?? "";
+
+                        if (!rowClass.Contains("sectionlistdivider"))
+                        {
+                            // This is a course header row
+                            var headerText = await row.TextContentAsync();
+                            headerText = headerText.Trim();
+
+                            if (headerText.StartsWith(degree) ||
+                                (degree.Contains("_") && headerText.StartsWith(degree.Replace("_", " "))))
+                            {
+                                if (rowClass.Contains("comment-text"))
+                                    continue;
+
+                                currentCourse = new CourseData { CourseName = headerText, Title = title };
+                                courses.Add(currentCourse);
+                            }
+                        }
+                        else if (currentCourse != null)
+                        {
+                            // This is a section row
+                            var cells = await row.QuerySelectorAllAsync("td");
+                            if (cells.Count < 5) continue;
+
+                            // Extract cell data safely with fallbacks
+                            string GetCellText(IElementHandle cell, string defaultValue = "")
+                            {
+                                try
+                                {
+                                    return cell.TextContentAsync().GetAwaiter().GetResult().Trim();
+                                }
+                                catch
+                                {
+                                    return defaultValue;
+                                }
+                            }
+
+                            var secCell = cells.FirstOrDefault(c => c.GetAttributeAsync("class").GetAwaiter().GetResult() == "sched_sec");
+                            var slnCell = cells.FirstOrDefault(c => c.GetAttributeAsync("class").GetAwaiter().GetResult() == "sched_sln");
+                            var limitCell = cells.FirstOrDefault(c => c.GetAttributeAsync("class").GetAwaiter().GetResult() == "sched_limit");
+                            var enrlCell = cells.FirstOrDefault(c => c.GetAttributeAsync("class").GetAwaiter().GetResult() == "sched_enrl");
+                            var crCell = cells.FirstOrDefault(c => c.GetAttributeAsync("class").GetAwaiter().GetResult() == "sched_cr");
+                            var daysCell = cells.FirstOrDefault(c => c.GetAttributeAsync("class").GetAwaiter().GetResult() == "sched_days");
+                            var locCell = cells.FirstOrDefault(c => c.GetAttributeAsync("class").GetAwaiter().GetResult() == "sched_loc");
+                            var instructorCell = cells.FirstOrDefault(c => c.GetAttributeAsync("class").GetAwaiter().GetResult() == "sched_instructor");
+
+                            if (secCell == null || slnCell == null) continue;
+
+                            var sectionText = GetCellText(secCell);
+                            var classNumberText = GetCellText(slnCell);
+                            var maxEnrolledText = limitCell != null ? GetCellText(limitCell, "0") : "0";
+                            var enrolledText = enrlCell != null ? GetCellText(enrlCell, "0") : "0";
+                            var credit = crCell != null ? GetCellText(crCell) : "";
+                            var fullText = daysCell != null ? GetCellText(daysCell) : "";
+                            var location = locCell != null ? GetCellText(locCell) : "";
+                            var instructor = instructorCell != null ? GetCellText(instructorCell) : "";
+
+                            // Process enrollment
+                            int.TryParse(classNumberText, out int classNumberInt);
+                            int.TryParse(maxEnrolledText, out int maxEnrolledInt);
+                            int.TryParse(enrolledText, out int enrolledInt);
+
+                            int spotsLeft = maxEnrolledInt - enrolledInt;
+                            string status = "";
+
+                            if (spotsLeft > 0)
+                                status = "Open";
+                            else if (spotsLeft == 0)
+                                status = "Full";
+                            else
+                            {
+                                spotsLeft = Math.Abs(spotsLeft);
+                                status = "Waitlist";
+                            }
+
+                            if (!sectionText.Contains("Lab"))
+                                sectionText += "    ";
+
+                            classNumberText = classNumberInt.ToString().PadLeft(5, '0');
+
+                            // Process days and time
+                            string daysText = "";
+                            string timeText = "";
+
+                            if (string.IsNullOrWhiteSpace(fullText) || fullText.Equals("ARRGT", StringComparison.OrdinalIgnoreCase))
+                            {
+                                daysText = "ARRGT";
+                                timeText = "";
+                            }
+                            else if (fullText.Contains(' '))
+                            {
+                                int spaceIndex = fullText.IndexOf(' ');
+                                daysText = fullText.Substring(0, spaceIndex);
+                                timeText = fullText.Substring(spaceIndex + 1);
+                            }
+                            else
+                            {
+                                daysText = fullText;
+                                timeText = "";
+                            }
+
+                            // Create section data
+                            SectionData section = new SectionData()
+                            {
+                                SectionNumber = sectionText,
+                                Credits = credit,
+                                ClassNumber = classNumberText,
+                                SpotsLeft = spotsLeft,
+                                Status = status,
+                                Days = daysText,
+                                Time = timeText,
+                                Location = location,
+                                Instructor = instructor
+                            };
+
+                            // Store in map and add to current course
+                            sectionMap[classNumberText] = section;
+                            currentCourse.Sections.Add(section);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error processing row: {ex.Message}");
+                    }
+                }
+
+                //Console.WriteLine($"Getting detailed information for {sectionMap.Count} sections");
+
+                foreach (var classNumber in sectionMap.Keys.ToList())
+                {
+                    try
+                    {
+                        // Find the section row that contains this class number
+                        var sectionCell = await page.QuerySelectorAsync($"td.sched_sln:text-is(\"{classNumber}\")");
+                        if (sectionCell == null)
+                        {
+                            Console.WriteLine($"Could not find section cell for class number {classNumber} in course {title}");
+
+                            continue;
+                        }
+
+                        // Find the parent row and then the section link
+                        var row = await sectionCell.EvaluateHandleAsync("el => el.closest('tr')");
+                        var secCell = await row.AsElement().QuerySelectorAsync("td.sched_sec");
+                        var secLink = await secCell.QuerySelectorAsync("a");
+
+                        if (secLink == null)
+                        {
+                            Console.WriteLine($"Could not find section link for class number {classNumber}");
+                            continue;
+                        }
+
+                        // Click the section link to view details
+                       // Console.WriteLine($"Clicking section link for class number {classNumber} class {title}");
+
+                        // 1) click with Playwrightís API
+                        await secLink.ClickAsync(new ElementHandleClickOptions());
+
+                        // 2) wait *explicitly* for the Knockout <dl> to render
+                        await page.WaitForSelectorAsync("dl.pagesdl", new PageWaitForSelectorOptions
+                        {
+                            State = WaitForSelectorState.Visible,
+                            Timeout = 10_000
+                        });
+
+                        // 3) now extract your details
+                        var details = await LoadCourseDescriptionDetails(page, classNumber);
+
+                        // Add details to the section
+                        if (sectionMap.ContainsKey(classNumber))
+                        {
+                            await Task.Delay(3000);
+                            sectionMap[classNumber].CourseDescriptionDetails.Add(details);
+                                //Console.WriteLine($"Added course details for class number {classNumber} class {title}");
+
+                            
+                        }
+
+                        // Go back to the course list
+                        await page.GoBackAsync();
+                        await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+                        await Task.Delay(3000);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error getting details for section {classNumber}: {ex.Message}");
+
+                        // Try to navigate back in case of error
+                        try
+                        {
+                            await page.GoBackAsync();
+                            await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+                            await Task.Delay(3000);
+                        }
+                        catch { }
+                    }
+                }
+
+                return courses;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error in ProcessCourseData: {ex.Message}");
+                return courses;
+            }
+        }
+
+        private static async Task<CourseDescriptionDetails> LoadCourseDescriptionDetails(IPage page, string classNumber)
+        {
+            CourseDescriptionDetails details = new CourseDescriptionDetails();
+            //Console.WriteLine($"Loading course description details for class number {classNumber}");
+            const int maxAttempts = 3;
+            const int retryDelayMs = 2000;
+            try
+            {
+                // Wait for details to load
+                await Task.Delay(3000);
+
+                // Get meeting items
+                var meetingItems = await page.QuerySelectorAllAsync("li.sectionmeetingitem");
+                foreach (var item in meetingItems)
+                {
+                    var dtText = await item.QuerySelectorAsync("span.sectionmeetingspanitem:nth-child(1)");
+                    var locText = await item.QuerySelectorAsync("span.sectionmeetingspanitem:nth-child(2)");
+
+                    if (dtText == null || locText == null) continue;
+
+                    string dtContent = await dtText.TextContentAsync();
+                    string locContent = await locText.TextContentAsync();
+
+                    var parts = dtContent.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    var daysPart = parts.ElementAtOrDefault(0) ?? string.Empty;
+                    var timeRaw = parts.ElementAtOrDefault(1) ?? string.Empty;
+
+                    string start12 = string.Empty, end12 = string.Empty;
+                    if (timeRaw.Contains('-'))
+                    {
+                        var timeParts = timeRaw.Split('-');
+                        var t0 = timeParts[0].Trim().Replace('.', ':');
+                        var t1 = timeParts[1].Trim().Replace('.', ':');
+
+                        // Handle AM/PM designation
+                        if (!t0.Contains("AM", StringComparison.OrdinalIgnoreCase) &&
+                            !t0.Contains("PM", StringComparison.OrdinalIgnoreCase))
+                        {
+                            double hour;
+                            if (double.TryParse(t0, out hour))
+                            {
+                                t0 = hour < 12 ? $"{t0} AM" : $"{t0} PM";
+                            }
+                        }
+
+                        if (!t1.Contains("AM", StringComparison.OrdinalIgnoreCase) &&
+                            !t1.Contains("PM", StringComparison.OrdinalIgnoreCase))
+                        {
+                            double hour;
+                            if (double.TryParse(t1.Split(':')[0], out hour))
+                            {
+                                t1 = hour < 12 ? $"{t1} AM" : $"{t1} PM";
+                            }
+                        }
+
+                        // Parse times
+                        DateTime startTime, endTime;
+                        if (DateTime.TryParse(t0, out startTime) && DateTime.TryParse(t1, out endTime))
+                        {
+                            start12 = startTime.ToString("h:mm tt");
+                            end12 = endTime.ToString("h:mm tt");
+                        }
+                    }
+
+                    // Add meeting info
+                    details.Meetings.Add(new MeetingsInfo
+                    {
+                        Days = daysPart,
+                        Time = string.IsNullOrEmpty(start12) ? string.Empty : $"{start12} - {end12}",
+                        Location = locContent ?? string.Empty
+
+                    });
+                }
+
+                // 2) Retry loop for the <dl> + <dt> parsing
+                IElementHandle? dl = null;
+                IReadOnlyList<IElementHandle> dtElements = Array.Empty<IElementHandle>();
+
+                for (int attempt = 1; attempt <= maxAttempts; attempt++)
+                {
+                    // wait up to retryDelayMs for the <dl.pagesdl> to attach
+                    dl = await page.WaitForSelectorAsync("dl.pagesdl", new PageWaitForSelectorOptions
+                    {
+                        State = WaitForSelectorState.Attached,
+                        Timeout = retryDelayMs
+                    });
+
+                    if (dl != null)
+                    {
+                        dtElements = await dl.QuerySelectorAllAsync("dt");
+                        if (dtElements.Count > 0)
+                            break;  // success!
+                    }
+
+                    Console.WriteLine($"Attempt {attempt}/{maxAttempts}: no <dt> found yetóretrying in {retryDelayMs}ms...");
+                    await Task.Delay(retryDelayMs);
+                }
+
+                if (dl == null || dtElements.Count == 0)
+                {
+                    Console.WriteLine($" Failed to load detail <dt> tags for SLN {classNumber}. Skipping.");
+                    return details;
+                }
+
+                // 3) Parse each dt ? dd pair
+                foreach (var dt in dtElements)
+                {
+                    var key = (await dt.TextContentAsync())?.Trim() ?? "";
+                    var ddHandle = await dt.EvaluateHandleAsync("d => d.nextElementSibling");
+                    var val = ddHandle != null
+                                 ? (await ddHandle.AsElement().TextContentAsync())?.Trim() ?? ""
+                                 : "";
+
+                    switch (key)
+                    {
+                        case "Course Description":
+                            details.CourseDescription = val;
+                            break;
+                        case "Course Prerequisite":
+                            details.CoursePrerequisite = val;
+                            break;
+                        case "Course Credit":
+                            details.CourseCredit = val;
+                            break;
+                        case "Special Course Fee":
+                            details.SpecialCourseFee = val;
+                            break;
+                        case "Consent required:":
+                            details.ConsentRequired = val;
+                            break;
+                        case "Crosslisted Courses":
+                            details.CrosslistedCourses = val;
+                            break;
+                        case "Conjoint Courses":
+                            details.ConjointCourses = val;
+                            break;
+                        case "UCORE":
+                            details.UCORE = val;
+                            break;
+                        case "[GRADCAPS] Graduate Capstone":
+                            details.GraduateCapstone = val;
+                            break;
+                        case "GER Code":
+                            details.GERCode = val;
+                            break;
+                        case "Writing in the Major":
+                            details.WritingInTheMajor = val;
+                            break;
+                        case "Cooperative":
+                            details.Cooperative = val;
+                            break;
+                        case "Instructor(s)":
+                            // Log for debugging
+                          //  Console.WriteLine($"Processing instructors for class {classNumber}");
+
+                            // Find the dd element that contains the instructor list by looking for the correct dt first
+                            var instructorDt = await page.QuerySelectorAsync("dt:has-text('Instructor(s)')");
+                            if (instructorDt != null)
+                            {
+                                // Get the next sibling which is the dd element containing the instructor list
+                                var instructorDd = await instructorDt.EvaluateHandleAsync("dt => dt.nextElementSibling");
+                                if (instructorDd != null)
+                                {
+                                    // Now get all visible li elements within this dd
+                                    var liElements = await instructorDd.AsElement().QuerySelectorAllAsync("li");
+
+                                    // Log how many elements we found
+                                 //   Console.WriteLine($"Found {liElements.Count/2} instructor elements for class {classNumber}");
+
+                                    // Create a set to track unique instructor names
+                                    HashSet<string> uniqueInstructors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                                    foreach (var li in liElements)
+                                    {
+                                        // Check if element is visible
+                                        var isVisible = await li.EvaluateAsync<bool>(@"
+                    el => {
+                        const style = window.getComputedStyle(el);
+                        return style.display !== 'none' && style.visibility !== 'hidden';
+                    }
+                ");
+
+                                        if (!isVisible) continue;
+
+                                        // Get name and check if it's primary
+                                        var name = await li.TextContentAsync();
+                                        name = name?.Trim();
+
+                                        if (string.IsNullOrWhiteSpace(name) || name.Equals("None listed", StringComparison.OrdinalIgnoreCase))
+                                            continue;
+
+                                        // Skip duplicates
+                                        if (uniqueInstructors.Contains(name))
+                                            continue;
+
+                                        uniqueInstructors.Add(name);
+
+                                        // Check if primary
+                                        var isPrimary = await li.EvaluateAsync<bool>(@"
+                    el => {
+                        const style = window.getComputedStyle(el);
+                        const fontWeight = style.fontWeight;
+                        const isBold = fontWeight === 'bold' || fontWeight === '700' || parseInt(fontWeight) >= 700;
+                        const dataBind = el.getAttribute('data-bind') || '';
+                        return isBold || (dataBind.includes('isPrimary()') && !dataBind.includes('!isPrimary()'));
+                    }
+                ");
+                                        if(liElements.Count==0)
+                                        {
+                                            details.Instructors.Add("None listed");
+                                        }
+
+                                        // Add to collection and log
+                                        details.Instructors.Add(name);
+
+                                        if (isPrimary)
+                                        {
+                                            Console.ForegroundColor = ConsoleColor.Green;
+                                          //  Console.WriteLine($"Primary Instructor: {name}");
+                                            Console.ResetColor();
+                                        }
+                                        else if(!isPrimary)
+                                        {
+                                            Console.ForegroundColor = ConsoleColor.Yellow;
+                                         //   Console.WriteLine($"Secondary Instructor: {name}");
+                                            Console.ResetColor();
+                                        }
+                                        else
+                                        {
+                                            Console.WriteLine($"Instructor not listed");
+                                        }
+                                    }
+                                }
+                            }
+                            break;
+                        case "Instruction Mode":
+                            details.InstructionMode = val;
+                            break;
+                        case "Enrollment Limit":
+                            details.EnrollmentLimit = val;
+                            break;
+                        case "Current Enrollment":
+                            details.CurrentEnrollment = val;
+                            break;
+                        case "Comment":
+                            details.Comment = val;
+                            break;
+                        case "Start Date":
+                            details.StartDate = val;
+                            break;
+                        case "End Date":
+                            details.EndDate = val;
+                            break;
+                        case "Footnotes":
+                            details.Footnotes = val;
+                            break;
+
+                    }
+                }
+            }
+            
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error in LoadCourseDescriptionDetails: {ex.Message}");
+            }
+
+            return details;
+        }
+
         public static void AddCourseData(string campusName, string termCode, string termDescription, List<CourseData> scrapedCourses)
         {
             Campus? campus = CampusesList.FirstOrDefault(c =>
@@ -189,596 +1185,35 @@
 
             term.Courses.AddRange(scrapedCourses);
         }
-        public static void DateLoad()
+
+        public static string WrapText(string text, int maxLineWidth)
         {
-            DateTime current = DateTime.Now;
-            DateTime february10 = new DateTime(2025, 2, 10);
-            DateTime march5 = new DateTime(2025, 3, 5);
-            DateTime june1 = new DateTime(2025, 6, 1);
+            if (string.IsNullOrEmpty(text))
+                return text;
 
+            var words = text.Split(' ');
+            var sb = new StringBuilder();
 
-
-            var watch = System.Diagnostics.Stopwatch.StartNew();
-            var options = new ChromeOptions();
-            options.AddArgument("--disable-usb");
-            options.AddArgument("--disable-usb-discovery");
-            options.AddArgument("--headless");
-            options.AddArgument("--log-level=3");
-            options.AddArgument("--disable-gpu");
-            options.AddArgument("--disable-logging");
-
-            var service = ChromeDriverService.CreateDefaultService();
-            service.SuppressInitialDiagnosticInformation = true;
-            service.HideCommandPromptWindow = true;
-            service.EnableVerboseLogging = false;
-            var campuses = new Dictionary<int, string>
-    {
-        { 1, "Everett" },
-        { 2, "Global" },
-        { 3, "Pullman" },
-        { 4, "Spokane" },
-        { 5, "Tri-Cities" },
-        { 6, "Vancouver" }
-    };
-
-            var terms = new Dictionary<int, string>
-    {
-        { 1, "Fall 2025" },
-        { 2, "Spring 2025" },
-        { 3, "Summer 2025" }
-    };
-
-            using (mainDriver = new ChromeDriver(service, options))
+            int currentLineLength = 0;
+            foreach (var word in words)
             {
-                mainDriver.Navigate().GoToUrl("https://schedules.wsu.edu");
-                if (current.Year == 2025)
+                // If adding this word would exceed the maximum line length, insert a newline.
+                if (currentLineLength + word.Length + 1 > maxLineWidth)
                 {
-                    if (current > march5)
-                    {
-                        for (int i = 1; i <= 6; i++)
-                        {
-                           // Console.WriteLine($"{campuses[i]} {terms[1]}");
-                            ClickEvent(campuses[i], terms[1], mainDriver);
-                            Thread.Sleep(5000);
-                            CourseLoadParallel(campuses[i], terms[1]);
-                            mainDriver.Navigate().Back();
-                        }
-                    }
-                    else if (current > june1)
-                    {
-                        for (int i = 1; i <= 6; i++)
-                        {
-                           // Console.WriteLine($"{campuses[i]} {terms[2]}");
-                            ClickEvent(campuses[i], terms[2], mainDriver);
-                            Thread.Sleep(5000);
-                            CourseLoadParallel(campuses[i], terms[2]);
-                            mainDriver.Navigate().Back();
-                        }
-                    }
-
-                    else if (current > february10)
-                    {
-                        for (int i = 1; i <= 6; i++)
-                        {
-                            //Console.WriteLine($"{campuses[i]} {terms[3]}");
-                            ClickEvent(campuses[i], terms[3], mainDriver);
-                            Thread.Sleep(5000);
-                            CourseLoadParallel(campuses[i], terms[3]);
-                            mainDriver.Navigate().Back();
-                        }
-                    }
+                    sb.AppendLine(); // Add a newline
+                    currentLineLength = 0; // Reset, accounting for the indentation length
                 }
-
+                sb.Append(word + " ");
+                currentLineLength += word.Length + 1;
             }
-            watch.Stop();
-            var elapsedminutes = watch.ElapsedMilliseconds / 60000;
-            var reminderelapsedseconds = (watch.ElapsedMilliseconds % 60000) / 1000;
-            Console.WriteLine($"Time elapsed: {elapsedminutes} minutes and {reminderelapsedseconds} seconds");
+            return sb.ToString();
         }
-        public static void ClickEvent(string campus, string term, ChromeDriver driver)
-        {
-            var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(30));
-            try
-            {
-                wait.Until(d => d.FindElements(By.ClassName("header_wrapper")).Count > 0);
 
-                var campusContainers = driver.FindElements(By.ClassName("header_wrapper"));
-                foreach (var container in campusContainers)
-                {
-                    var cityElement = container.FindElement(By.ClassName("City"));
-                    if (cityElement.Text.Trim().Equals(campus, StringComparison.OrdinalIgnoreCase))
-                    {
-                        var semesterLinks = wait.Until(d => container.FindElements(By.ClassName("nav-item")));
-                        foreach (var link in semesterLinks)
-                        {
-                            if (link.Text.Contains(term, StringComparison.OrdinalIgnoreCase))
-                            {
-                                wait.Until(d => link.FindElement(By.TagName("a"))).Click();
+        public static string GetMeetingsInfoSummary(CourseDescriptionDetails details)
+            => details.Meetings.Any()
+                ? string.Join(", ", details.Meetings)
+                : string.Empty;
 
-                                Thread.Sleep(10000);
-                                return;
-                            }
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error in ClickEvent: {ex.Message}");
-            }
-        }
-        public static void CourseLoadParallel(string campus, string term)
-        {
-            if (mainDriver == null)
-            {
-                throw new InvalidOperationException("The mainDriver is not initialized.");
-            }
-
-            var wait = new WebDriverWait(mainDriver, TimeSpan.FromSeconds(20));
-            string tableBodyXPath = "/html/body/div[1]/div[3]/div/div[2]/main/div[2]/div/div/div/table/tbody";
-            string rowXPath = tableBodyXPath + "/tr";
-
-            int rowCount = 0;
-            wait.Until(driver =>
-            {
-                var rows = driver.FindElements(By.XPath(rowXPath));
-                if (rows.Count > 0)
-                {
-                    rowCount = rows.Count;
-                    return true;
-                }
-                return false;
-            });
-            // Console.WriteLine($"Found {rowCount} rows in the zebra table.");
-
-            var expectedSubjects = new HashSet<string>();
-            var mainRows = mainDriver.FindElements(By.XPath(rowXPath));
-            foreach (var row in mainRows)
-            {
-                try
-                {
-                    var subjElement = row.FindElement(By.XPath("./td[2]/a"));
-                    expectedSubjects.Add(subjElement.Text.Trim());
-                }
-                catch { }
-            }
-            // Console.WriteLine($"Expected subjects count: {expectedSubjects.Count}");
-
-            int partitionCount = Math.Min(30, rowCount);
-            int basePartitionSize = rowCount / partitionCount;
-            int remainder = rowCount % partitionCount;
-            var partitions = new List<(int start, int end)>();
-            int startIndex = 1;
-            for (int i = 0; i < partitionCount; i++)
-            {
-                int partitionSize = basePartitionSize + (i < remainder ? 1 : 0);
-                int endIndex = startIndex + partitionSize - 1; 
-                partitions.Add((startIndex, endIndex));
-                startIndex = endIndex + 1;
-            }
-            if (startIndex <= rowCount)
-            {
-                partitions.Add((startIndex, rowCount));
-            }
-
-            var results = new ConcurrentDictionary<string, List<CourseData>>();
-
-            var tasks = partitions.Select(partition => Task.Run(() =>
-            {
-                var courseOptions = new ChromeOptions();
-                courseOptions.AddArgument("--disable-usb");
-                courseOptions.AddArgument("--disable-usb-discovery");
-                courseOptions.AddArgument("--headless");
-                courseOptions.AddArgument("--log-level=3");
-                courseOptions.AddArgument("--disable-gpu");
-                courseOptions.AddArgument("--disable-logging");
-
-                var courseService = ChromeDriverService.CreateDefaultService();
-                courseService.SuppressInitialDiagnosticInformation = true;
-                courseService.HideCommandPromptWindow = true;
-                courseService.EnableVerboseLogging = false;
-
-                using var driver = new ChromeDriver(courseService, courseOptions,TimeSpan.FromSeconds(120));
-                driver.Navigate().GoToUrl("https://schedules.wsu.edu");
-                Thread.Sleep(10000);
-                ClickEvent(campus, term, driver);
-                wait.Until(d => d.FindElements(By.XPath(rowXPath)).Count == rowCount);
-
-                for (int i = partition.start; i <= partition.end; i++)
-                {
-                    try
-                    {
-                        string currentRowXPath = $"{tableBodyXPath}/tr[{i}]";
-                        var rowElement = driver.FindElement(By.XPath(currentRowXPath));
-                        var subjectElement = rowElement.FindElement(By.XPath($"{currentRowXPath}/td[2]/a"));
-                        string subjectText = subjectElement.Text.Trim();
-                        var subjectTitle = rowElement.FindElement(By.XPath($"{currentRowXPath}/td[3]"));
-                        string subjectTitleText = subjectTitle.Text.Trim();
-
-                        wait.Until(d => subjectElement.Displayed);
-                        subjectElement.Click();
-                        wait.Until(d => d.FindElements(By.XPath("//table/tbody/tr")).Count > 0);
-                        var courseData = ProcessCourseData(driver, subjectText, subjectTitleText);
-
-                        if (courseData.Count > 0)
-                        {
-                            results.AddOrUpdate(subjectText, courseData, (key, existing) =>
-                            {
-                                existing.AddRange(courseData);
-                                return existing;
-                            });
-                        }
-                        driver.Navigate().Back();
-                        Thread.Sleep(5000);
-                    }
-                    catch (Exception)
-                    {
-                        //Console.WriteLine($"Error processing row {i}: {ex.Message}");
-                    }
-                }
-                driver.Quit();
-            })).ToArray();
-
-            Task.WhenAll(tasks).Wait();
-
-            //  Missing Rows Check & Retry
-            var processedSubjects = new HashSet<string>(results.Keys);
-            var missingSubjects = expectedSubjects.Except(processedSubjects).ToList();
-            if (missingSubjects.Count > 0)
-            {
-                Console.WriteLine($"Retrying missing subjects: {string.Join(", ", missingSubjects)}");
-                var courseOptions = new ChromeOptions();
-                courseOptions.AddArgument("--disable-usb");
-                courseOptions.AddArgument("--disable-usb-discovery");
-                courseOptions.AddArgument("--headless");
-                courseOptions.AddArgument("--log-level=3");
-                courseOptions.AddArgument("--disable-gpu");
-                courseOptions.AddArgument("--disable-logging");
-
-                var courseService = ChromeDriverService.CreateDefaultService();
-                courseService.SuppressInitialDiagnosticInformation = true;
-                courseService.HideCommandPromptWindow = true;
-                courseService.EnableVerboseLogging = false;
-
-                using var missingDriver = new ChromeDriver(courseService, courseOptions);
-                missingDriver.Navigate().GoToUrl("https://schedules.wsu.edu");
-                Thread.Sleep(3000);
-                ClickEvent(campus, term, missingDriver);
-                wait.Until(d => d.FindElements(By.XPath(rowXPath)).Count == rowCount);
-                foreach (var subject in missingSubjects)
-                {
-                    try
-                    {
-                        Thread.Sleep(2000);
-                        var rowElement = missingDriver.FindElement(By.XPath($"//td/a[normalize-space(text())='{subject}']/ancestor::tr"));
-                        var subjectTitle = rowElement.FindElement(By.XPath("./td[3]"));
-                        string subjectTitleText = subjectTitle.Text.Trim();
-                        var subjectElement = rowElement.FindElement(By.XPath("./td[2]/a"));
-                        subjectElement.Click();
-                        wait.Until(d => d.FindElements(By.XPath("//table/tbody/tr")).Count > 0);
-                        var courseData = ProcessCourseData(missingDriver, subject, subjectTitleText);
-                        if (courseData.Count > 0)
-                        {
-                            results.AddOrUpdate(subject, courseData, (key, existing) =>
-                            {
-                                existing.AddRange(courseData);
-                                return existing;
-                            });
-                        }
-                        missingDriver.Navigate().Back();
-                        Thread.Sleep(5000);
-                    }
-                    catch (Exception)
-                    {
-                        //Console.WriteLine($"Failed to retry subject {subject}: {ex.Message}");
-                    }
-                }
-                missingDriver.Quit();
-            }
-
-
-            foreach (var kvp in results.OrderBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase))
-            {
-                //Console.WriteLine($"\n===========================================================  Subject: {kvp.Key}  ===========================================================");
-
-                foreach (var course in kvp.Value.OrderBy(c => c.CourseName))  // Sort courses by name
-                {
-                    //Console.WriteLine($"{course.CourseName}");
-
-                    foreach (var section in course.Sections.OrderBy(s => s.SectionNumber))  // Sort sections numerically
-                    {
-                        //Console.WriteLine($"*   Section: {section.SectionNumber}, Credits: {section.Credits}, Class Number: {section.ClassNumber},Status: {section.Status}, Spots Left: {section.SpotsLeft}");
-                        //Console.WriteLine($"    *   Days: {section.Days}, Time: {section.Time}, Location: {section.Location}, Instructor: {section.Instructor}");
-                        /*
-                         foreach (var detail in section.CourseDescriptionDetails)
-                        {
-                            int maxWidth =80;
-                            string wrappedDescription = WrapText(detail.CourseDescription, maxWidth);
-                            Console.WriteLine($"        *Course Description: {detail.CourseDescription}, Course PreRecs: {detail.CoursePrerequisite}, Credits: {detail.CourseCredit}");
-                            Console.WriteLine($"        *Special Fee: {detail.SpecialCourseFee}, Consent: {detail.ConsentRequired}, Crosslisted: {detail.CrosslistedCourses}, Conjoint: {detail.ConjointCourses}");
-                            Console.WriteLine($"        *UCORE: {detail.UCORE}, , GER: {detail.GERCode}, Writing: {detail.WritingInTheMajor}");
-                            Console.WriteLine($"        *Cooperative: {detail.Cooperative}, Instr. Mode: {detail.InstructionMode}");
-                            Console.WriteLine($"        *Comment: {detail.Comment}, Footnotes: {detail.Footnotes}");
-                        }
-                         */
-                        if (section.CourseDetails.Any())
-                        {
-                            foreach (var detail in section.CourseDetails)
-                            {
-                                // Console.WriteLine($"         {detail}");
-                            }
-                        }
-                    }
-                }
-            }
-            //Console.WriteLine($"Total courses processed: {processedSubjects.Count()}");
-            // Console.WriteLine($"Missing numbers: {expectedSubjects.Count - processedSubjects.Count}");
-            Thread.Sleep(5000);
-            var allScrapedCourses = results.Values.SelectMany(courses => courses).ToList();
-            AddCourseData(campus, term, term, allScrapedCourses);
-        }
-        static List<CourseData> ProcessCourseData(ChromeDriver driverInstance, string degree, string title)
-        {
-            Thread.Sleep(5000);
-            List<CourseData> courses = new List<CourseData>();
-            Dictionary<string, SectionData> sectionMap = new Dictionary<string, SectionData>();
-
-            var allRows = driverInstance.FindElements(By.XPath("//table/tbody/tr"));
-            if (allRows == null || allRows.Count == 0)
-            {
-                return courses;
-            }
-
-            CourseData? currentCourse = null;
-
-            // First try block: Process sections class number all that good stuff and store mapping by class number as it is special.
-            try
-            {
-                foreach (var row in allRows)
-                {
-                    string rowClass = row.GetAttribute("class") ?? "";
-                    if (!rowClass.Contains("sectionlistdivider"))
-                    {
-                        string headerText = row.Text.Trim();
-                        if (headerText.StartsWith(degree))
-                        {
-                            if (rowClass.Contains("comment-text"))
-                                continue;
-                            currentCourse = new CourseData { CourseName = headerText, Title = title };
-                            courses.Add(currentCourse);
-                        }
-                    }
-                    else if (currentCourse != null)
-                    {
-                        try
-                        {
-                            var sectionCell = row.FindElement(By.XPath(".//td[@class='sched_sec']"));
-                            string sectionText = sectionCell.Text.Trim();
-
-                            var numberCell = row.FindElement(By.XPath(".//td[@class='sched_sln']"));
-                            string classNumberText = numberCell.Text.Trim();
-
-                            var maxEnrolledCell = row.FindElement(By.XPath(".//td[@class='sched_limit']"));
-                            string maxEnrolledText = maxEnrolledCell.Text.Trim();
-                            var enrolledCell = row.FindElement(By.XPath(".//td[@class='sched_enrl']"));
-                            string enrolledText = enrolledCell.Text.Trim();
-                            var creditCell = row.FindElement(By.XPath(".//td[@class='sched_cr']"));
-                            string credit = creditCell.Text.Trim();
-                            var daysCell = row.FindElement(By.XPath(".//td[@class='sched_days']"));
-                            string fullText = daysCell.Text.Trim();
-                            var locationCell = row.FindElement(By.XPath(".//td[@class='sched_loc']"));
-                            string location = locationCell.Text.Trim();
-                            var instructorCell = row.FindElement(By.XPath(".//td[@class='sched_instructor']"));
-                            string instructor = instructorCell.Text.Trim();
-
-                            _ = int.TryParse(classNumberText, out int classNumberInt);
-                            _ = int.TryParse(maxEnrolledText, out int maxEnrolledInt);
-                            _ = int.TryParse(enrolledText, out int enrolledInt);
-                            int spotsLeft = maxEnrolledInt - enrolledInt;
-                            string status = "";
-                            if (spotsLeft > 0)
-                                status = "Open";
-                            else if (spotsLeft == 0)
-                                status = "Full";
-                            else { spotsLeft = Math.Abs(spotsLeft); status = "Waitlist"; }
-
-                            if (!sectionText.Contains("Lab"))
-                                sectionText += "    ";
-                            classNumberText = classNumberInt.ToString().PadLeft(5, '0');
-
-                            string daysText = "";
-                            string timeText = "";
-                            if (string.IsNullOrWhiteSpace(fullText) || fullText.Equals("ARRGT", StringComparison.OrdinalIgnoreCase))
-                            {
-                                daysText = "ARRGT";
-                                timeText = "";
-                            }
-                            else if (fullText.Contains(' '))
-                            {
-                                int spaceIndex = fullText.IndexOf(' ');
-                                daysText = fullText.Substring(0, spaceIndex);
-                                timeText = fullText.Substring(spaceIndex + 1);
-                            }
-                            else
-                            {
-                                daysText = fullText;
-                                timeText = "";
-                            }
-
-                            SectionData section = new SectionData()
-                            {
-                                SectionNumber = sectionText,
-                                Credits = credit,
-                                ClassNumber = classNumberText,
-                                SpotsLeft = spotsLeft,
-                                Status = status,
-                                Days = daysText,
-                                Time = timeText,
-                                Location = location,
-                                Instructor = instructor
-                            };
-
-                            // each classNumberText is unique to its section.
-                            sectionMap[classNumberText] = section;
-                            currentCourse.Sections.Add(section);
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine("Error processing basic section info: " + ex.Message);
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error in first phase: " + ex.Message);
-            }
-
-            // Second try block: For  class number, click the corresponding section button,
-            // click it, extract details, attach them to the correct SectionData, then navigate back.
-            try
-            {
-                foreach (string key in sectionMap.Keys.ToList())
-                {
-                    try
-                    {
-                        var sectionNumberElement = driverInstance.FindElement(
-                            By.XPath($"//td[@class='sched_sln' and normalize-space(text())='{key}']"));
-                        var sectionRow = sectionNumberElement.FindElement(By.XPath("./ancestor::tr"));
-                        var button = sectionRow.FindElement(By.XPath(".//td[@class='sched_sec']/a"));
-
-                        button.Click();
-                        Thread.Sleep(5000);
-
-                        var extraDetailsObj = LoadCourseDescriptionDetails(driverInstance);
-                        List<string> extraDetailsList = ConvertDetailsToStringList(extraDetailsObj);
-
-                        if (sectionMap.ContainsKey(key))
-                        {
-                            sectionMap[key].CourseDescriptionDetails.Add(extraDetailsObj);
-                            //Console.WriteLine($"DEBUG: Added extra details to class number {key}. Count now: {sectionMap[key].CourseDescriptionDetails.Count}");
-
-                        }
-
-                        driverInstance.Navigate().Back();
-                        Thread.Sleep(7000);
-                    }
-                    catch (Exception ex2)
-                    {
-                        Console.WriteLine("Error processing extra details for class number " + key + ": " + ex2.Message);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error in second try block: " + ex.Message);
-            }
-
-            return courses;
-        }
-        public static CourseDescriptionDetails LoadCourseDescriptionDetails(ChromeDriver driverInstance)
-        {
-            CourseDescriptionDetails details = new CourseDescriptionDetails();
-            try
-            {
-                Thread.Sleep(5000);
-                var dlElement = driverInstance.FindElement(By.XPath("/html/body/div[1]/div[3]/div/div[2]/main/div[4]/div/div/dl"));
-                string? detailsHtml = dlElement.GetAttribute("outerHTML");
-                if(string.IsNullOrEmpty(detailsHtml))
-                {
-                    Console.WriteLine("No details found.");
-                    return details;
-                }
-                var doc = new HtmlDocument();
-                doc.LoadHtml(detailsHtml);
-
-                var dtNodes = doc.DocumentNode.SelectNodes("//dt");
-                if (dtNodes != null)
-                {
-                    foreach (var dt in dtNodes)
-                    {
-                        var dd = dt.SelectSingleNode("following-sibling::dd[1]");
-                        string key = dt.InnerText.Trim();
-                        string value = dd != null ? dd.InnerText.Trim() : string.Empty;
-
-                        switch (key)
-                        {
-                            case "Course Description":
-                                details.CourseDescription = value;
-                                break;
-                            case "Course Prerequisite":
-                                details.CoursePrerequisite = value;
-                                break;
-                            case "Course Credit":
-                                details.CourseCredit = value;
-                                break;
-                            case "Special Course Fee":
-                                details.SpecialCourseFee = value;
-                                break;
-                            case "Consent required:":
-                                details.ConsentRequired = value;
-                                break;
-                            case "Crosslisted Courses":
-                                details.CrosslistedCourses = value;
-                                break;
-                            case "Conjoint Courses":
-                                details.ConjointCourses = value;
-                                break;
-                            case "UCORE":
-                                details.UCORE = value;
-                                break;
-                            case "[GRADCAPS] Graduate Capstone":
-                                details.GraduateCapstone = value;
-                                break;
-                            case "GER Code":
-                                details.GERCode = value;
-                                break;
-                            case "Writing in the Major":
-                                details.WritingInTheMajor = value;
-                                break;
-                            case "Cooperative":
-                                details.Cooperative = value;
-                                break;
-                            case "Meetings Info":
-                                details.MeetingsInfo.Add(value);
-                                break;
-                            case "Instructor(s)":
-                                details.Instructors.Add(value);
-                                break;
-                            case "Instruction Mode":
-                                details.InstructionMode = value;
-                                break;
-                            case "Enrollment Limit":
-                                details.EnrollmentLimit = value;
-                                break;
-                            case "Current Enrollment":
-                                details.CurrentEnrollment = value;
-                                break;
-                            case "Comment":
-                                details.Comment = value;
-                                break;
-                            case "Start Date":
-                                details.StartDate = value;
-                                break;
-                            case "End Date":
-                                details.EndDate = value;
-                                break;
-                            case "Footnotes":
-                                details.Footnotes = value;
-                                break;
-                            default:
-                                // Ignore any unknown keys
-                                break;
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error loading course details: {ex.Message}");
-            }
-            return details;
-        }
         public static List<string> ConvertDetailsToStringList(CourseDescriptionDetails details)
         {
             var list = new List<string>();
@@ -821,32 +1256,18 @@
                 list.Add(details.EndDate);
             if (!string.IsNullOrWhiteSpace(details.Footnotes))
                 list.Add(details.Footnotes);
+            if (details.Instructors.Any())
+                list.AddRange(details.Instructors);
+
 
             return list;
         }
-        public static string WrapText(string text, int maxLineWidth)
-        {
-            if (string.IsNullOrEmpty(text))
-                return text;
-
-            var words = text.Split(' ');
-            var sb = new StringBuilder();
-
-            int currentLineLength = 0;
-            foreach (var word in words)
-            {
-                // If adding this word would exceed the maximum line length, insert a newline.
-                if (currentLineLength + word.Length + 1 > maxLineWidth)
-                {
-                    sb.AppendLine(); // Add a newline
-                    //sb.Append("         "); // Indent wrapped lines if desired (match your printing indentation)
-                    currentLineLength = 9; // Reset, accounting for the indentation length
-                }
-                sb.Append(word + " ");
-                currentLineLength += word.Length + 1;
-            }
-            return sb.ToString();
-        }
-
     }
+
 }
+       
+      
+
+
+
+

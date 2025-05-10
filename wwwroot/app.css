@@ -1,6 +1,25 @@
 html, body {
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    background-color: #f8f9fa;
+    font-family: 'Times New Roman';
+    background-color: darkgray;
+}
+
+.navbar{
+    background-color: maroon;
+}
+
+.navbar .nav-link{
+    color: white;
+    text-decoration: none;
+}
+
+.navbar .navbar-brand{
+    color: white;
+    font-weight: bolder;
+}
+
+.navbar .nav-link.active {
+    font-weight: bold;
+    color: gold !important;
 }
 
 a, .btn-link {
@@ -8,13 +27,21 @@ a, .btn-link {
 }
 
 .btn-primary {
-    color: #fff;
-    background-color: #1b6ec2;
-    border-color: #1861ac;
+    color: white;
+    background-color: maroon;
+    border-color: crimson;
 }
-
+.btn-primary:hover,
+.btn-primary:focus,
+.btn-primary:active,
+.btn-primary.active {
+  background-color: #3d3d3d !important;
+  border-color:     var(--page-bg-color) !important;
+  color:            gold            !important;
+  box-shadow: none !important; 
+}
 .btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
-  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
+  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #3d3d3d;
 }
 
 .content {
@@ -49,22 +76,4 @@ h1:focus {
 
 .darker-border-checkbox.form-check-input {
     border-color: #929292;
-}
-.schedule-grid {
-    display: grid;
-    grid-template-columns: [timecol] 80px [moncol] 1fr [tuecol] 1fr [wedcol] 1fr [thucol] 1fr [fricol] 1fr;
-    grid-auto-rows: 60px;
-}
-
-.time-col {
-    grid-column: timecol;
-}
-
-.mon-col {
-    grid-column: moncol;
-}
-.course-block {
-    grid-row: 2 / 4; 
-    background-color: #cfc;
-    border: 1px solid #090;
 }

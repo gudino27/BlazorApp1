@@ -7,6 +7,9 @@
     <UserSecretsId>0c15759b-4fdc-4db4-83fc-f1bed8cad55e</UserSecretsId>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
     <DockerfileContext>.</DockerfileContext>
+    <WarningLevel>0</WarningLevel>
+    <Controller_SelectedScaffolderID>RazorComponentScaffolder</Controller_SelectedScaffolderID>
+    <Controller_SelectedScaffolderCategoryPath>root/Common/Blazor</Controller_SelectedScaffolderCategoryPath>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,9 +18,8 @@
     <PackageReference Include="HtmlAgilityPack" Version="1.12.0" />
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.21.0" />
     <PackageReference Include="OfficeOpenXml.Core.ExcelPackage" Version="1.0.0" />
-    <PackageReference Include="Selenium.Support" Version="4.30.0" />
-    <PackageReference Include="Selenium.WebDriver" Version="4.30.0" />
-    <PackageReference Include="Selenium.WebDriver.ChromeDriver" Version="135.0.7049.4200" />
+    <PackageReference Include="Microsoft.Playwright" Version="1.52.0" />
+    <PackageReference Include="PuppeteerSharp" Version="20.1.3" />    
   </ItemGroup>
 
 </Project>
