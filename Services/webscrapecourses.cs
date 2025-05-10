@@ -343,7 +343,7 @@ namespace BlazorApp1.Services
                 var processedSubjects = new List<string>();
 
                 // Process in batches with parallelization
-                int maxParallel = Math.Min(20, subjectData.Count); // Limit parallelism
+                int maxParallel = Math.Min(27, subjectData.Count); // Limit parallelism
                 var batches = SplitIntoBatches(subjectData, maxParallel);
 		int batchindexcount=0;
                 var results = new ConcurrentDictionary<string, List<CourseData>>();
