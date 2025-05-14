@@ -1,0 +1,102 @@
+﻿/* CSS for navbar with proper collapse behavior */
+
+/* Base navbar styles */
+.navbar {
+    background-color: #8b0000 !important;
+    padding: 0 !important;
+}
+
+/* Container within navbar */
+.navbar-container {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+}
+
+/* Navbar brand */
+.navbar-brand {
+    color: white !important;
+    margin-right: 0.5rem !important;
+    padding: 0.5rem 0.75rem !important;
+}
+
+/* Navbar toggler (hamburger button) */
+.navbar-toggler {
+    margin-left: auto !important;
+    border-color: rgba(255, 255, 255, 0.5) !important;
+    padding: 0.25rem 0.5rem !important;
+}
+
+    .navbar-toggler:focus {
+        box-shadow: 0 0 0 0.1rem rgba(255, 255, 255, 0.5) !important;
+    }
+
+/* Nav links */
+.navbar-dark .navbar-nav .nav-link {
+    color: white !important;
+    padding: 1rem 0.75rem !important;
+}
+
+    .navbar-dark .navbar-nav .nav-link:hover {
+        color: gold !important;
+    }
+
+    .navbar-dark .navbar-nav .nav-link.active {
+        color: gold !important;
+        text-decoration: underline !important;
+    }
+
+/* Desktop styles */
+@media (min-width: 992px) {
+    /* Make links display horizontally on desktop */
+    .navbar-collapse {
+        display: flex !important;
+        flex-basis: auto;
+        margin-left: 0 !important;
+    }
+
+    .navbar-nav {
+        flex-direction: row !important;
+    }
+
+    /* Make sure other navbar elements aren't affecting layout */
+    .navbar-expand-lg .navbar-nav {
+        flex-direction: row;
+    }
+
+    .navbar-expand-lg .navbar-toggler {
+        display: none;
+    }
+}
+
+/* Mobile styles */
+@media (max-width: 991.98px) {
+    /* Position the collapsed menu below the navbar */
+    .navbar-collapse {
+        position: absolute !important;
+        top: 100% !important; /* Position right below navbar */
+        left: 0 !important;
+        right: 0 !important;
+        background-color: #8b0000 !important;
+        z-index: 1000 !important;
+        padding: 0.5rem 0 !important;
+    }
+
+    /* Make nav links stack vertically on mobile */
+    .navbar-nav {
+        flex-direction: column !important;
+    }
+
+    .nav-item {
+        width: 100% !important;
+    }
+
+    .nav-link {
+        padding: 0.75rem 1.25rem !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+    }
+
+    /* Ensure the brand and toggle button align properly */
+    .navbar-brand {
+        margin-right: auto !important;
+    }
+}

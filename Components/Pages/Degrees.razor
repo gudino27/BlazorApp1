@@ -6,7 +6,7 @@
 @inject DegreeService DegreeService
 @inject IJSRuntime JS
 
-<h1>Available Degrees</h1>
+<h1 class="page-title"style="padding-top:15%">Available Degrees</h1>
 
 @* pull your majors/minors from your DegreeDataService *@
 @foreach (var major in DegreeService.GetAllMajors())

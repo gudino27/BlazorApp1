@@ -1,4 +1,7 @@
-﻿/* Primary button hover, focus, active, and active state styling */
+﻿main, .content {
+    padding-top: 60px !important; /* Adjust this value based on your navbar height */
+}
+/* Primary button hover, focus, active, and active state styling */
 .btn-primary:hover,
 .btn-primary:focus,
 .btn-primary:active,
@@ -13,29 +16,117 @@
     box-shadow: none !important;
 }
 
+/* App header styles */
+.app-header {
+    background-color: #8b0000; 
+    color: white;
+    display: flex;
+    align-items: center;
+    height: 60px;
+    width: 100%;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.app-title {
+    font-size: 1.3rem;
+    margin: 0 15px;
+    white-space: nowrap;
+}
+
+.nav-menu {
+    display: flex;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.nav-item {
+    padding: 0 15px;
+    cursor: pointer;
+}
+
+    .nav-item.active {
+        font-weight: bold;
+        text-decoration: underline;
+    }
+
+.hamburger-menu {
+    display: none; /* Hidden by default, shown on small screens */
+    margin-left: auto;
+    margin-right: 15px;
+    cursor: pointer;
+    font-size: 1.5rem;
+}
+
 /* Main container for the scheduler view: two panels side by side */
 .scheduler-container {
     display: flex;
     gap: 20px; /* Space between selection and schedule panels */
     height: calc(100vh - 150px); /* Full viewport height minus header/footer */
     overflow: hidden; /* Prevent overflow from breaking layout */
+    position: relative;
+    width: 130%; /* Full width of the parent container */
 }
 
 /* Left-hand panel: course selection list */
 .selection-panel {
-    flex: 0 0 335px; /* Fixed width of 320px */
+    flex: 0 0 335px; /* Fixed width of 335px */
     overflow-y: auto; /* Scroll vertically if content overflows */
     padding-right: 10px; /* Space to the right for scrollbar */
+    transition: all 0.3s ease; /* Smooth transition for sidebar collapse */
+}
+
+/* Sidebar hidden state */
+.sidebar-hidden {
+    margin-left: -335px; /* Move sidebar out of view */
+}
+
+/* Sidebar toggle button */
+.sidebar-toggle {
+    background: #8b0000;
+    color: white;
+    border: none;
+    border-radius: 0 4px 4px 0;
+    position: absolute;
+    left: 335px;
+    top: 10px;
+    width: 24px;
+    height: 40px;
+    cursor: pointer;
+    z-index: 50;
+    transition: left 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sidebar-toggle-hidden {
+    left: 0;
+}
+
+/* Mobile sidebar toggle button */
+.mobile-sidebar-toggle {
+    display: none; /* Hidden by default, shown on small screens */
+    width: 100%;
+    background: #8b0000;
+    color: white;
+    border: none;
+    padding: 10px;
+    text-align: center;
+    cursor: pointer;
+    margin-bottom: 10px;
 }
 
 /* Right-hand panel: weekly schedule display */
 .schedule-panel {
-    flex: 1; /* Fill remaining space */
     position: relative; /* For absolutely positioned course blocks */
     overflow-y: auto; /* Scroll vertically if needed */
     border: 1px solid #ddd; /* Light border */
     border-radius: 4px; /* Rounded corners */
     background-color: #fff; /* White background */
+    --total-days: 5; /* Total number of days in the schedule */
 }
 
 /* Table wrapper for weekly schedule */
@@ -49,6 +140,7 @@
     border-collapse: collapse; /* Remove gaps between cells */
     table-layout: fixed; /* Equal column widths */
 }
+
 
     /* Shared cell styling for headers and data */
     .schedule-table th,
@@ -88,14 +180,13 @@
 /* Visual block representing a scheduled course */
 .course-block {
     position: absolute; /* Positioned based on time slot */
-    width: 100%;
-    left: 0;
     z-index: 10; /* Above other elements */
     border-radius: 4px;
     padding: 5px;
     overflow: hidden; /* Clip overflow text */
-    font-size: 0.85rem;
+    font-size: 0.7rem;
     box-shadow: 0 1px 3px rgba(0,0,0,0.12); /* Subtle drop shadow */
+    width: calc((100% - 80px) / var(--total-days));
 }
 
 /* Header inside a course block (course name) */
@@ -103,13 +194,13 @@
     font-weight: bold;
     white-space: nowrap;
     overflow: hidden;
-    text-overflow: ellipsis; /* Truncate long names */
+    text-overflow:ellipsis; /* Truncate long names */
 }
 
 /* Time and location text inside course blocks */
 .course-block-time,
 .course-block-location {
-    font-size: 0.75rem;
+    font-size: 0.6rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -286,3 +377,163 @@
     border-left: 4px solid #6c757d; /* Gray accent */
 }
 
+/* Course grouping styles */
+.course-group {
+    border-left: 3px solid #007bff;
+    margin-bottom: 5px;
+}
+
+    .course-group .course-name {
+        font-weight: bold;
+        cursor: pointer;
+    }
+
+.course-sections {
+    padding-left: 10px;
+    border-left: 1px dashed #ccc;
+    margin-top: 8px;
+}
+
+.section-item {
+    padding: 6px 10px;
+    border-radius: 4px;
+    margin-bottom: 4px;
+    background-color: #f8f9fa;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+    .section-item:hover {
+        background-color: #e9ecef;
+    }
+
+.conflict-warning {
+    border-left: 3px solid #fd7e14;
+}
+
+.status-open {
+    color: #28a745;
+    font-weight: bold;
+}
+
+.status-full {
+    color: #dc3545;
+}
+
+.status-waitlist {
+    color: #fd7e14;
+}
+
+/* Page title styling */
+.page-title {
+    margin: 50px 0;
+    margin-bottom: 0px;
+    padding: 0 15px;
+}
+
+/* RESPONSIVE STYLES */
+@media (max-width: 1024px) {
+    /* For medium screens */
+    .selection-panel {
+        flex: 0 0 300px; /* Slightly smaller width */
+    }
+
+    .sidebar-toggle {
+        left: 300px;
+    }
+
+
+    .scheduler-container {
+        gap: 10px; /* Smaller gap */
+    }
+    
+}
+
+@media (max-width: 767px) {
+    /* For small screens/mobile */
+    .scheduler-container {
+        flex-direction: column;
+        height: auto;
+        max-height: calc(100vh - 120px);
+        gap: 5px;
+        width: 150%;
+        overflow-x: auto; /* Allow horizontal scrolling */
+    }
+
+    .selection-panel {
+        flex: 0 0 auto;
+        max-height: 40vh;
+        width: 100%;
+        padding-right: 0;
+    }
+
+    .sidebar-toggle {
+        display: none; /* Hide the sidebar toggle button */
+    }
+
+    .mobile-sidebar-toggle {
+        display: block; /* Show mobile toggle button */
+    }
+
+    .schedule-panel {
+        height: 50vh; /* Fixed height on mobile */
+        width: 120%;
+        overflow-x: auto; /* Allow horizontal scrolling */
+        overflow-y: auto; /* Allow vertical scrolling */
+    }
+
+    .hamburger-menu {
+        display: block; /* Show hamburger menu */
+    }
+
+    .nav-menu {
+        position: absolute;
+        top: 60px;
+        left: 0;
+        width: 100%;
+        background-color: #8b0000;
+        flex-direction: column;
+        padding: 10px 0;
+        display: none;
+        z-index: 99;
+    }
+
+        .nav-menu.active {
+            display: flex;
+        }
+
+    .nav-item {
+        padding: 10px 20px;
+    }
+
+    /* Adjust modal for small screens */
+    .modal-content {
+        width: 95%;
+        max-height: 80vh;
+    }
+
+    /* Improve touch targets on mobile */
+    .section-item,
+    .scheduled-course-item,
+    .course-group {
+        padding: 10px;
+    }
+
+    /* Adjust course blocks for mobile view */
+    .course-block {
+        font-size: 0.75rem;
+        width: calc((100% - 80px) / var(--total-days));
+    }
+
+    .course-block-time,
+    .course-block-location {
+        font-size: 0.7rem;
+    }
+}
+
+/* Small height screens */
+@media (max-height: 700px) {
+    .scheduler-container {
+        height: calc(100vh - 100px);
+    }
+}

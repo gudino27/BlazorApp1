@@ -21,7 +21,7 @@ namespace BlazorApp1.Services
         *   Post-condition: Degree description is printed                                 *
         *   Returns: void                                                                 *
         ***********************************************************************************/
-        public virtual void PrintDegreInfo()
+        public virtual void PrintDegreeInfo()
         {
             Console.WriteLine(DegreeDescription);
         }
@@ -53,7 +53,7 @@ namespace BlazorApp1.Services
          *   Post-condition: Degree info is printed                                        *
          *   Returns: void                                                                 *
          ***********************************************************************************/
-        public override void PrintDegreInfo()
+        public override void PrintDegreeInfo()
         {
             Console.WriteLine(Header);
             if (!string.IsNullOrWhiteSpace(Description))
@@ -82,7 +82,9 @@ namespace BlazorApp1.Services
     }
 
     public class Minor : Degree
+
     {
+        public string Header { get; set; } = "";
         public int TotalCredits { get; set; }
         public int UpperDivisionCredits { get; set; }
         public double? MinimumGPA { get; set; }
@@ -134,17 +136,18 @@ namespace BlazorApp1.Services
                     Courses.Add(course);
             }
         }
-        public override void PrintDegreInfo()
+        public override void PrintDegreeInfo()
         {
             Console.WriteLine("[MINOR DEBUG PREVIEW]\n======================");
-            Console.WriteLine($"Minor: {DegreeDescription}");
+            Console.WriteLine($"Minor: {Header}");
+            Console.WriteLine($"Description: {DegreeDescription}");
 
             if (TotalCredits > 0)
                 Console.WriteLine($"Minimum credits: {TotalCredits}");
             if (UpperDivisionCredits > 0)
                 Console.WriteLine($"upper-division credits: {UpperDivisionCredits}");
             if (MinimumGPA.HasValue)
-                Console.WriteLine($"minimum Cumalitive GPA: {MinimumGPA:F1}");
+                Console.WriteLine($"minimum Cumulative  GPA: {MinimumGPA:F1}");
 
             foreach (var course in Courses.Distinct())
                 Console.WriteLine($"Course: {course}");
@@ -166,7 +169,7 @@ namespace BlazorApp1.Services
     public class DegreeScrape
     {
         public static List<Degree> degreeList = new();
-
+        
         /// <summary>
         /// Scrapes all degrees from the WSU catalog using Playwright
         /// </summary>
@@ -213,7 +216,7 @@ namespace BlazorApp1.Services
 
                 // Determine optimal number of parallel tasks
                 int coreCount = Environment.ProcessorCount;
-                int numParallel = Math.Max(20, Math.Min(8, (coreCount / 2) + 1));
+                int numParallel = Math.Max(25, Math.Min(8, (coreCount / 2) + 1));
                 Console.WriteLine($"Detected {coreCount} logical processors. Using {numParallel} parallel tasks.\n");
 
                 // Create a thread-safe collection for results
@@ -523,11 +526,27 @@ namespace BlazorApp1.Services
 
                             {
                                 Console.WriteLine($"Processing minor: {label}");
+                                // Fix for CS0119, CS1003, and CS0103 errors
+                                // The issue is with the incorrect use of the `Any` method and the lambda expression.
+                                // Correcting the lambda parameter and ensuring proper syntax.
+
+                                if (localDegrees.Any(d => d is Minor minor && minor.Header.Equals(label, StringComparison.OrdinalIgnoreCase)))
+                                {
+                                    Console.WriteLine($"Minor {label} already exists in the list. Skipping.");
+                                    continue;
+                                }
                                 await ProcessMinorDegreePageAsync(page, localDegrees, label);
+                                
                             }
                             else
                             {
                                 Console.WriteLine($"Processing major: {label}");
+                                // Check if the major is already in the list
+                                if (localDegrees.Any(d => d is Major major&& major.Header.Equals(label, StringComparison.OrdinalIgnoreCase)))
+                                {
+                                    Console.WriteLine($"Major {label} already exists in the list. Skipping.");
+                                    continue;
+                                }
                                 await ProcessDynamicDegreePageAsync(page, localDegrees);
                             }
                         }
@@ -591,7 +610,7 @@ namespace BlazorApp1.Services
             var doc = new HtmlDocument();
             doc.LoadHtml(rawHtml);
 
-            var minor = new Minor { DegreeDescription = minorName };
+            var minor = new Minor { Header= minorName };
 
             // Grab all inner divs without a class (content paragraphs)
             var blocks = doc.DocumentNode
@@ -671,13 +690,13 @@ namespace BlazorApp1.Services
 
                     if (tdClass.Equals("degree_sequence_Year", StringComparison.OrdinalIgnoreCase))
                     {
-                        major.StructuredOutput.Add($"====== {await tds[0].TextContentAsync()} ======");
+                        major.StructuredOutput.Add($"{await tds[0].TextContentAsync()}");
                         continue;
                     }
 
                     if (tdClass.Contains("degree_sequence_term"))
                     {
-                        major.StructuredOutput.Add($"---- {await tds[0].TextContentAsync()} ----");
+                        major.StructuredOutput.Add($"{await tds[0].TextContentAsync()}");
                         continue;
                     }
 

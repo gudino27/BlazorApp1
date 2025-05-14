@@ -1,0 +1,15 @@
+﻿main, .content {
+    padding-top: 60px !important;
+    background-color: darkgray;
+}
+.content {
+    padding-top: 1.1rem;
+}
+.page-title {
+    padding-top: 60px !important;
+}
+.Container {
+    padding-top: 60px !important;
+}
+
+

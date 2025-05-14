@@ -6,7 +6,8 @@
 <!--// Includes the namespace for services -->
 @inject CourseService DataService 
 <!--// Injects the CourseService for data access -->
-<h3>Course Scheduler</h3> <!-- Page title -->
+<h3 class="page-title"
+>Course Scheduler</h3> <!-- Page title -->
 
 <div class="scheduler-container">
     <!-- Left panel for course selection and schedule details -->
@@ -36,20 +37,48 @@
 
         <!-- Search Controls -->
         <div class="search-container mt-3">
-            <input class="form-control" placeholder="Search courses..." 
-                   @bind-value="SearchQuery" 
-                   @bind-value:event="oninput" 
-                   @onkeyup="FilterCourses" /> <!-- Input for searching courses -->
+            <input class="form-control" placeholder="Search courses..."
+            @bind-value="SearchQuery"
+            @bind-value:event="oninput"
+            @onkeyup="FilterCourses" /> <!-- Input for searching courses -->
 
             <div class="search-results mt-2">
-                @if (FilteredCourses.Any()) // Checks if there are any filtered courses
+                @if (GroupedFilteredCourses.Any()) // Check if there are any grouped filtered courses
                 {
                     <ul class="list-group">
-                        @foreach (var course in FilteredCourses.Take(10)) // Limits results to 10 courses
+                        @foreach (var courseGroup in GroupedFilteredCourses.Take(10)) // Limit to 10 course groups
                         {
-                            <li class="list-group-item course-item" @onclick="() => SelectCourse(course)">
-                                <div class="course-name">@course.CourseName</div> <!-- Displays course name -->
-                                <div class="course-title small text-muted">@course.Title</div> <!-- Displays course title -->
+                            <li class="list-group-item course-group">
+                                <div class="d-flex justify-content-between align-items-center"
+                                @onclick="() => ToggleCourseExpand(courseGroup.Key)">
+                                    <div class="course-name">@courseGroup.Key</div> <!-- Course name -->
+                                    <button class="btn btn-sm btn-outline-secondary">
+                                        @(IsExpanded(courseGroup.Key) ? "Collapse" : "Expand")
+                                    </button>
+                                </div>
+
+                                @if (IsExpanded(courseGroup.Key)) // Check if the course group is expanded
+                                {
+                                    <div class="course-sections mt-2">
+                                        @foreach (var course in courseGroup)
+                                        {
+                                            //<div class="course-title small text-muted mb-2">@course.CourseName</div> <!-- Course title -->
+                                            @foreach (var sec in course.Sections) // Loop through sections of the course
+                                            {
+                                                <div class="section-item @(IsScheduleConflict(sec) ? "conflict-warning" : "")"
+                                                @onclick="() => SelectCourseAndShowSection(course, sec)">
+                                                    <div class="d-flex justify-content-between">
+                                                        <div class="section-code">Section @sec.SectionNumber</div> <!-- Section number -->
+                                                        <div class="section-details">
+                                                            <span class="section-time">@FormatTime(sec)</span> <!-- Section time -->
+                                                            <span class="section-status @GetStatusClass(sec.Status)">@sec.Status</span> <!-- Section status -->
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            }
+                                        }
+                                    </div>
+                                }
                             </li>
                         }
                     </ul>
@@ -60,29 +89,6 @@
                 }
             </div>
         </div>
-
-        <!-- Selected Course Details -->
-        @if (SelectedCourse != null) // Checks if a course is selected
-        {
-            <div class="selected-course mt-3">
-                <h5>@SelectedCourse.CourseName</h5> <!-- Displays selected course name -->
-                <div class="course-title mb-2 small">@SelectedCourse.Title</div> <!-- Displays selected course title -->
-
-                <div class="sections-list">
-                    @foreach (var sec in SelectedCourse.Sections) // Loops through sections of the selected course
-                    {
-                        <div class="section-item @(IsScheduleConflict(sec) ? "conflict-warning" : "")" @onclick="() => ShowSectionDetail(sec)">
-                            <div class="section-code">Section @sec.SectionNumber</div> <!-- Displays section number -->
-                            <div class="section-details">
-                                <span class="section-time">@FormatTime(sec)</span> <!-- Displays section time -->
-                                <span class="section-status @GetStatusClass(sec.Status)">@sec.Status</span> <!-- Displays section status -->
-                            </div>
-                        </div>
-                    }
-                </div>
-            </div>
-        }
-
         <!-- Credit Summary -->
         <div class="credit-summary mt-3">
             <h5>Credit Summary</h5> <!-- Credit summary header -->
@@ -126,7 +132,7 @@
                     @{
                         var startHour = 7; // Start time for the schedule (7 AM)
                         var endHour = 23;  // End time for the schedule (11 PM)
-                        
+
                         for (int hour = startHour; hour < endHour; hour++) // Loops through each hour
                         {
                             <tr class="hour-row">
@@ -141,7 +147,7 @@
                 </tbody>
             </table>
         </div>
-        
+
         @foreach (var scheduled in ScheduledSections) // Loops through scheduled sections
         {
             @if (scheduled.Days.Any() && scheduled.StartTime.TotalHours >= startHour && scheduled.StartTime.TotalHours < endHour) // Checks if section fits in schedule
@@ -152,7 +158,7 @@
                     if (dayIndex >= 0) // Validates day index
                     {
                         <div class="course-block @GetCourseColorClass(scheduled)"
-                             style="@GetCoursePositionStyle(scheduled, dayIndex)"> <!-- Styles the course block -->
+                             style="@GetCoursePositionStyle(scheduled, dayIndex);"> <!-- Styles the course block -->
                             <div class="course-block-header">@scheduled.Course.CourseName</div> <!-- Displays course name -->
                             <div class="course-block-time">
                                 @SafeFormatTimeSpan(scheduled.StartTime) - @SafeFormatTimeSpan(scheduled.EndTime) <!-- Displays time range -->
@@ -205,17 +211,17 @@
                     <div class="info-row">
                         <span class="label">Instructor:</span>
                         <span class="value">
-                        @if (GetCourseDescriptionDetails(DisplayedSection)?.Instructors.Any() == true) // Checks if instructors are listed
-                        {
-																									@foreach (var instructor in GetCourseDescriptionDetails(DisplayedSection).Instructors) // Loops through instructors
-																									{
-																									<div>@instructor</div> <!-- Displays instructor name -->
-																									}
-                        }
-                        else                          
-                        {
-                        <span class="value">None Listed </span> <!-- Displays "None Listed" if no instructors -->
-                        }                                  
+                            @if (GetCourseDescriptionDetails(DisplayedSection)?.Instructors.Any() == true) // Checks if instructors are listed
+                            {
+                                @foreach (var instructor in GetCourseDescriptionDetails(DisplayedSection).Instructors) // Loops through instructors
+                                {
+                                    <div>@instructor</div> <!-- Displays instructor name -->
+                                }
+                            }
+                            else                          
+                            {
+                                <span class="value">None Listed </span> <!-- Displays "None Listed" if no instructors -->
+                            }                                  
                         </span>
                     </div>
                     <div class="info-row">
@@ -263,7 +269,7 @@
                         </div>
                     }
                     <button class="btn @(IsScheduleConflict(DisplayedSection) ? "btn-warning" : "btn-success")" 
-                            @onclick="() => AddSection(DisplayedSection)"> <!-- Button to add section -->
+                    @onclick="() => AddSection(DisplayedSection)"> <!-- Button to add section -->
                         @(IsScheduleConflict(DisplayedSection) ? "Add Despite Conflict" : "Add to Schedule") <!-- Button text based on conflict -->
                     </button>
                 </div>
@@ -340,11 +346,11 @@
     void LoadCourses()
     {
         AllLoadedCourses.Clear(); // Clear the existing list of courses
-        
+
         // Fetch courses for the selected campus and term
         var campusCourses = DataService.GetCourses(SelectedCampus, SelectedTerm);
         AllLoadedCourses.AddRange(campusCourses);
-        
+
         // If the term is Summer and the campus is not Global, include Global campus courses
         if (SelectedTerm == "Summer 2025" && SelectedCampus != "Global")
         {
@@ -356,6 +362,36 @@
     // Method to trigger UI updates when the search query changes
     void FilterCourses()
     {
+
+        if (SearchQuery.Contains("  "))
+        {
+            SearchQuery = System.Text.RegularExpressions.Regex.Replace(
+                SearchQuery,
+                @"\s{2,}",
+                " "
+            );
+        }
+
+        // Only replace the space between dept code and course number
+        if (System.Text.RegularExpressions.Regex.IsMatch(SearchQuery, @"[A-Za-z_]+\s\d"))
+        {
+            var currentQuery = SearchQuery;
+
+            SearchQuery = System.Text.RegularExpressions.Regex.Replace(
+                SearchQuery,
+                @"([A-Za-z_]+)\s(\d)",
+                "$1    $2"  // Using actual tab character
+            );
+
+            // Skip state update if nothing changed
+            if (currentQuery == SearchQuery)
+            {
+                return;
+            }
+        }
+
+    
+
         StateHasChanged(); // Notify the UI to re-render
     }
 
@@ -365,7 +401,61 @@
         SelectedCourse = course; // Set the selected course
         DisplayedSection = null; // Clear any displayed section details
     }
+    // Grouped filtered courses based on the search query
+    IEnumerable<IGrouping<string, CourseData>> GroupedFilteredCourses =>
+    string.IsNullOrWhiteSpace(SearchQuery)
+        ? new List<IGrouping<string, CourseData>>() // Return an empty list if the search query is empty
+        : AllLoadedCourses.Where(c => !string.IsNullOrWhiteSpace(c.CourseName) &&
+                                (
+                                    // Make the search more flexible by handling spaces and underscores
+                                    c.CourseName.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase) ||
+                                    // Also match if underscore is replaced with space in the course name
+                                    c.CourseName.Replace("_", "").Contains(SearchQuery, StringComparison.OrdinalIgnoreCase) ||
+								    // Also match if space is replaced with underscore in the search query
+                                    c.CourseName.Contains(SearchQuery.Replace(" ", "_"), StringComparison.OrdinalIgnoreCase) ||
+                                    // Include title search as before
+                                    (!string.IsNullOrWhiteSpace(c.Title) &&
+                                     c.Title.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase))
+                                ))
+                        .GroupBy(c => c.CourseName)
+                        .Take(10); // Limit to 10 course groups
 
+
+    // Track which course groups are expanded
+    Dictionary<string, bool> ExpandedCourses = new();
+
+    // Check if a course group is expanded
+    bool IsExpanded(string courseName)
+    {
+        if (ExpandedCourses.TryGetValue(courseName, out bool expanded))
+        {
+            return expanded;
+        }
+        return false;
+    }
+
+    // Toggle expand/collapse state of a course group
+    void ToggleCourseExpand(string courseName)
+    {
+        if (ExpandedCourses.ContainsKey(courseName))
+        {
+            ExpandedCourses[courseName] = !ExpandedCourses[courseName];
+        }
+        else
+        {
+            ExpandedCourses[courseName] = true;
+        }
+    }
+
+    // Select a course and show section details
+    void SelectCourseAndShowSection(CourseData course, SectionData section)
+    {
+        SelectedCourse = course;
+        ShowSectionDetail(section);
+    }
+
+ 
+    
     // Method to display details of a specific section in a modal
     void ShowSectionDetail(SectionData sec)
     {
@@ -721,9 +811,9 @@
         // Calculate the left position based on day index (0=Monday, 1=Tuesday, etc.)
         // First column is time (80px), then each day column is 20% of remaining width
         int timeColWidth = 80; // Width of time column in px
-        double leftPos = dayIndex * 18 + 9; // 9% per column starting after time column
+        double leftPos = dayIndex * 18.8 + 6; // 9% per column starting after time column
         
-        return $"top: {startOffset}px; height: {height}px; left: {leftPos}%; width: 18.5%;";
+        return $"top: {startOffset}px; height: {height}px; left: {leftPos}%;";
     }
 
     // Method to check if a section conflicts with the current schedule

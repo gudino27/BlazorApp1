@@ -696,6 +696,10 @@ namespace BlazorApp1.Services
                             // This is a course header row
                             var headerText = await row.TextContentAsync();
                             headerText = headerText.Trim();
+                            if(headerText.Contains("\t"))
+                            {
+                                headerText = headerText.Replace("\t","");
+                            }
 
                             if (headerText.StartsWith(degree) ||
                                 (degree.Contains("_") && headerText.StartsWith(degree.Replace("_", " "))))
@@ -822,11 +826,24 @@ namespace BlazorApp1.Services
                     try
                     {
                         // Find the section row that contains this class number
+                        //Console.WriteLine($"Getting details for class number {classNumber} in course {title}");
+                        // Find the section cell
+                        Task.Delay(3000).Wait();
                         var sectionCell = await page.QuerySelectorAsync($"td.sched_sln:text-is(\"{classNumber}\")");
                         if (sectionCell == null)
                         {
-                            Console.WriteLine($"Could not find section cell for class number {classNumber} in course {title}");
-
+                            for (int i = 0; i < 3; i++)
+                            { Task.Delay(3000).Wait();
+                            sectionCell = await page.QuerySelectorAsync($"td.sched_sln:text-is(\"{classNumber}\")");
+                                Console.WriteLine($"Retrying to find section cell for class number {classNumber}");
+                                if (sectionCell != null)
+                                    break;
+                            }
+                            if (sectionCell == null)
+                            {
+                                Console.WriteLine($"Could not find section cell for class number {classNumber}");
+                                continue;
+                            }
                             continue;
                         }
 

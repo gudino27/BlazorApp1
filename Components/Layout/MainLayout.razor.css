@@ -2,10 +2,13 @@
     position: relative;
     display: flex;
     flex-direction: column;
+    background-color: darkgray;
 }
 
 main {
     flex: 1;
+    background-color: darkgray;
+    padding-top: 60px !important;
 }
 
 .sidebar {
@@ -19,6 +22,7 @@ main {
     height: 3.5rem;
     display: flex;
     align-items: center;
+    padding: 0 1.5rem;
 }
 
     .top-row ::deep a, .top-row ::deep .btn-link {
